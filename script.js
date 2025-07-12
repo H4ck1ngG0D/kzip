@@ -19,9 +19,16 @@ function toUnicodeEscape(str) {
 
 // UTF-16 Unicodeエスケープ → 元の文字列に戻す
 function fromUnicodeEscape(str) {
-  return str.replace(/\\u([\dA-Fa-f]{4})/g, (match, grp) => {
-    return String.fromCharCode(parseInt(grp, 16));
-  });
+  const parts = str.split('\\u');
+  let result = parts[0]; // 最初の空白 or 先頭部分
+
+  for (let i = 1; i < parts.length; i++) {
+    const code = parts[i].slice(0, 4);
+    const rest = parts[i].slice(4);
+    result += String.fromCharCode(parseInt(code, 16)) + rest;
+  }
+
+  return result;
 }
 
 // ROT13変換（アルファベットのみ変換）
