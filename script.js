@@ -19,16 +19,9 @@ function toUnicodeEscape(str) {
 
 // UTF-16 Unicodeエスケープ → 元の文字列に戻す
 function fromUnicodeEscape(str) {
-  const parts = str.split('\\u');
-  let result = parts[0]; // 最初の空白 or 先頭部分
-
-  for (let i = 1; i < parts.length; i++) {
-    const code = parts[i].slice(0, 4);
-    const rest = parts[i].slice(4);
-    result += String.fromCharCode(parseInt(code, 16)) + rest;
-  }
-
-  return result;
+  return str.replace(/\\u([\dA-Fa-f]{4})/g, (match, grp) => {
+    return String.fromCharCode(parseInt(grp, 16));
+  });
 }
 
 // ROT13変換（アルファベットのみ変換）
@@ -133,40 +126,54 @@ function decompressFile() {
   }
 
   const reader = new FileReader();
+  reader.onload = () => {
+    const data = new Uint8Array(reader.result);
 
-  // 一度だけの onload にする（関数外で定義しない）
-  reader.onload = function () {
+    // マジックバイトチェック
+    const magic = new TextDecoder().decode(data.slice(0, 9));
+    if (magic !== "KAMICRYPT") {
+      return alert("正しい .kamichita ファイルではありません");
+    }
+
+    // XOR復号
+    const encrypted = data.slice(9);
+    const decryptedXOR = xorUint8Array(encrypted, XOR_KEY);
+
+    // Uint8Array → 文字列(Base64)
+    const base64Str = String.fromCharCode(...decryptedXOR);
+
     try {
-      const data = new Uint8Array(reader.result);
-
-      const magic = new TextDecoder().decode(data.slice(0, 9));
-      if (magic !== "KAMICRYPT") {
-        return alert("正しい .kamichita ファイルではありません");
-      }
-
-      const encrypted = data.slice(9);
-      const decryptedXOR = xorUint8Array(encrypted, XOR_KEY);
-      const base64Str = String.fromCharCode(...decryptedXOR);
-
+      // Base64 decode
       const caesarStr = base64Decode(base64Str);
+
+      // Caesarシフト -5
       const rot13Str = caesarShift(caesarStr, -5);
+
+      // ROT13解除（ROT13は自己逆）
       const unicodeEscaped = rot13(rot13Str);
+
+      // Unicodeエスケープ解除
       const zipStr = fromUnicodeEscape(unicodeEscaped);
+
+      // 文字列 → Uint8Array
       const zipData = stringToUint8Array(zipStr);
 
-      // ZIPとして保存
-      const blob = new Blob([zipData], { type: "application/zip" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "extracted.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(a.href);
+      // JSZipで解凍
+      JSZip.loadAsync(zipData).then(zip => {
+        zip.forEach(async (relativePath, file) => {
+          const blob = await file.async("blob");
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(a.href);
+        });
+      }).catch(() => alert("ZIP解凍に失敗しました"));
     } catch (e) {
-      alert("解凍エラー: " + e.message);
+      alert("復号に失敗しました: " + e.message);
     }
   };
-
   reader.readAsArrayBuffer(files[0]);
 }
