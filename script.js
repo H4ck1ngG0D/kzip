@@ -28,12 +28,12 @@ function base64Decode(str) {
   return decodeURIComponent(escape(atob(str)));
 }
 function uint8ArrayToString(uint8Array) {
-  let result = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    result += String.fromCharCode(...uint8Array.slice(i, i + chunkSize));
-  }
-  return result;
+  let result = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    result += String.fromCharCode(...uint8Array.slice(i, i + chunkSize));
+  }
+  return result;
 }
 function stringToUint8Array(str) {
   const arr = new Uint8Array(str.length);
@@ -79,7 +79,7 @@ function decompressFile() {
     try {
       const encrypted = new Uint8Array(reader.result);
       const decrypted = xorUint8Array(encrypted, XOR_KEY);
-      const base64 = String.fromCharCode(...decrypted);
+      const base64 = uint8ArrayToString(decrypted);
       const roted = base64Decode(base64);
       const unicode = rot13(roted);
       const zipStr = fromUnicodeEscape(unicode);
