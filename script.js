@@ -61,11 +61,21 @@ function xorUint8Array(data, key) {
 }
 
 function uint8ArrayToString(uint8Array) {
-  return String.fromCharCode(...uint8Array);
+  let result = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.slice(i, i + chunkSize);
+    result += String.fromCharCode(...chunk);
+  }
+  return result;
 }
 
 function stringToUint8Array(str) {
-  return new Uint8Array([...str].map(c => c.charCodeAt(0)));
+  const arr = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) {
+    arr[i] = str.charCodeAt(i);
+  }
+  return arr;
 }
 
 // 圧縮＆暗号化
