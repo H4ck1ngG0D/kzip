@@ -129,48 +129,35 @@ function decompressFile() {
   reader.onload = () => {
     const data = new Uint8Array(reader.result);
 
-    // マジックバイトチェック
     const magic = new TextDecoder().decode(data.slice(0, 9));
     if (magic !== "KAMICRYPT") {
       return alert("正しい .kamichita ファイルではありません");
     }
 
-    // XOR復号
     const encrypted = data.slice(9);
     const decryptedXOR = xorUint8Array(encrypted, XOR_KEY);
 
-    // Uint8Array → 文字列(Base64)
     const base64Str = String.fromCharCode(...decryptedXOR);
 
     try {
-      // Base64 decode
       const caesarStr = base64Decode(base64Str);
-
-      // Caesarシフト -5
       const rot13Str = caesarShift(caesarStr, -5);
-
-      // ROT13解除（ROT13は自己逆）
       const unicodeEscaped = rot13(rot13Str);
-
-      // Unicodeエスケープ解除
       const zipStr = fromUnicodeEscape(unicodeEscaped);
 
-      // 文字列 → Uint8Array
       const zipData = stringToUint8Array(zipStr);
 
-      // JSZipで解凍
-      JSZip.loadAsync(zipData).then(zip => {
-        zip.forEach(async (relativePath, file) => {
-          const blob = await file.async("blob");
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          URL.revokeObjectURL(a.href);
-        });
-      }).catch(() => alert("ZIP解凍に失敗しました"));
+      // ↓ここでBlobをzip拡張子にしてダウンロードさせる
+      const blob = new Blob([zipData], { type: "application/zip" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "extracted.zip";  // 拡張子は.zip
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+
+      // （もし展開も同時にやりたい場合はJSZip.loadAsync(zipData)を使う）
     } catch (e) {
       alert("復号に失敗しました: " + e.message);
     }
