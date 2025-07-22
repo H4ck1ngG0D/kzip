@@ -16,4 +16,4 @@ def clean_webm_suffix():
 if __name__ == "__main__":
     while True:
         clean_webm_suffix()
-        time.sleep(10)  # 10秒ごとに監視
+        time.sleep(0.5)  # 10秒ごとに監視
