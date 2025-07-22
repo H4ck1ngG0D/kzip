@@ -1,140 +1,118 @@
-import os, time, threading, base64, hashlib
-from flask import Flask, render_template, send_file, abort
+import os
+import time
+import tempfile
+import subprocess
+import base64
+import hashlib
 from discord import app_commands, Intents, Client, Interaction
-import yt_dlp
 import discord
+import yt_dlp
 
-# === 環境設定 ===
-TOKEN = ""
-BASE_URL = "https://ec5a407eeded-5005-shironekousercontent.paicha.dev:5005"
-PORT = 5000
-DOWNLOAD_FOLDER = "downloads"
-os.makedirs(DOWNLOAD_FOLDER, exist_ok=True)
+# === 設定 ===
+TOKEN = "YOUR_DISCORD_BOT_TOKEN"
+COOLDOWN_SECONDS = 180
+MAX_FILE_SIZE_MB = 1024 * 10  # 10 GB（transfer.sh制限）
 
-# === Flask サーバー ===
-app = Flask(__name__)
-download_info = {}  # id: {path, expire, title, thumbnail}
-
-@app.route("/video/<id>")
-def video_page(id):
-    info = download_info.get(id)
-    if not info or time.time() > info["expire"]:
-        return abort(404)
-    return render_template("download.html", id=id, title=info.get("title"), thumbnail=info.get("thumbnail"))
-
-@app.route("/download/<id>")
-def download_file(id):
-    info = download_info.get(id)
-    if not info:
-        return render_template("download.html", error="指定されたIDは存在しません。")
-
-    if time.time() > info["expire"]:
-        return render_template("download.html", error="このダウンロードリンクは有効期限が切れています。")
-
-    exts = ["mp4", "webm", "mp3", "m4a"]
-    original_path = info["path"]
-
-    # まずは元のパスで存在チェック
-    if os.path.exists(original_path):
-        return send_file(original_path, as_attachment=True)
-
-    # 拡張子違いのファイルを探す
-    base = os.path.splitext(original_path)[0]
-    for ext in exts:
-        alt_path = f"{base}.{ext}"
-        if os.path.exists(alt_path):
-            return send_file(alt_path, as_attachment=True)
-
-    # ファイルが見つからなかった場合はダウンロードページにエラーを渡して表示
-    return render_template("download.html", error="ファイルが見つかりませんでした。")
-
-def cleanup_file(id):
-    info = download_info.pop(id, None)
-    if info:
-        try:
-            os.remove(info["path"])
-        except:
-            pass
-
-# === Discord Bot 設定 ===
+# === Discord Bot ===
 intents = Intents.default()
 client = Client(intents=intents)
 tree = app_commands.CommandTree(client)
-cooldowns = {}  # user_id: {cmd: last_time}
+cooldowns = {}
+cache = {}  # URL+format : uploaded link
 
+# === ヘルパー ===
 def is_on_cooldown(user_id, cmd_key):
     now = time.time()
-    if user_id not in cooldowns:
-        cooldowns[user_id] = {}
-    last = cooldowns[user_id].get(cmd_key, 0)
-    if now - last > 180:
-        cooldowns[user_id][cmd_key] = now
+    last = cooldowns.get(user_id, {}).get(cmd_key, 0)
+    if now - last > COOLDOWN_SECONDS:
+        cooldowns.setdefault(user_id, {})[cmd_key] = now
         return False
     return True
 
 def generate_id(link):
-    h = hashlib.sha256(link.encode()).digest()
-    return base64.urlsafe_b64encode(h[:6]).decode("utf-8")
+    return base64.urlsafe_b64encode(hashlib.sha256(link.encode()).digest()[:6]).decode()
 
-def extract_info(link, ydl_opts):
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        return ydl.extract_info(link, download=False)
+def sanitize_filename(name):
+    return "".join(c if c.isalnum() or c in "-_()[]" else "_" for c in name)[:100]
 
-def download_video(link, output_path, format_opt):
-    ydl_opts = {
-        'format': format_opt,
-        'outtmpl': output_path,
-        'quiet': True,
-        'noplaylist': True,
-        'continuedl': True,
-        'retries': 3,
-        'no_warnings': True,
-        'concurrent_fragment_downloads': 3,
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([link])
+def get_title(link):
+    try:
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(link, download=False)
+            return info.get("title", "video")
+    except Exception:
+        return "video"
 
+def download_and_upload(link, format_opt, is_audio):
+    ext = "mp3" if is_audio else "mp4"
+    title = sanitize_filename(get_title(link))
+    filename = f"{title}.{ext}"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_path = os.path.join(tmpdir, filename)
+
+        ydl_opts = {
+            'format': format_opt,
+            'outtmpl': output_path,
+            'quiet': True,
+            'noplaylist': True,
+            'continuedl': True,
+            'retries': 3,
+            'no_warnings': True,
+        }
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([link])
+
+        if not os.path.exists(output_path):
+            raise Exception("ダウンロードに失敗しました")
+
+        # ファイルサイズ制限チェック（transfer.shは10GBまで）
+        size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        if size_mb > MAX_FILE_SIZE_MB:
+            raise Exception(f"ファイルサイズが大きすぎます（{size_mb:.2f}MB）")
+
+        result = subprocess.run(
+            ["curl", "--upload-file", output_path, f"https://transfer.sh/{filename}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=90
+        )
+
+        if result.returncode != 0:
+            raise Exception(f"curlエラー: {result.stderr.decode()}")
+
+        return result.stdout.decode().strip()
+
+# === ダウンロード処理 ===
 async def handle_download(interaction: Interaction, link: str, fmt: str, is_audio: bool):
     user_id = interaction.user.id
-    cmd_key = fmt
-    if is_on_cooldown(user_id, cmd_key):
-        await interaction.response.send_message("⏳ スパム防止のため、3分待ってください。", ephemeral=True)
+    cmd_key = link + fmt
+
+    if is_on_cooldown(user_id, fmt):
+        await interaction.response.send_message("⏳ スパム防止のため3分待ってください。", ephemeral=True)
         return
 
-    await interaction.response.send_message("📥 ダウンロード準備中...", ephemeral=True)
-    id = generate_id(link + fmt)
-    ext = "mp3" if is_audio else "mp4"
-    output_path = os.path.join(DOWNLOAD_FOLDER, f"{id}.{ext}")
+    if cmd_key in cache:
+        await interaction.response.send_message(f"✅ 既にアップ済みです：\n{cache[cmd_key]}", ephemeral=True)
+        return
 
-    if not os.path.exists(output_path):
-        try:
-            download_video(link, output_path, fmt)
-        except Exception as e:
-            await interaction.followup.send(f"❌ ダウンロード失敗: {e}", ephemeral=True)
-            return
+    await interaction.response.send_message("📥 ダウンロード中... しばらくお待ちください。", ephemeral=True)
 
-    info = extract_info(link, {'quiet': True})
-    title = info.get("title", "Untitled")
-    thumbnail = info.get("thumbnail")
+    try:
+        url = download_and_upload(link, fmt, is_audio)
+        cache[cmd_key] = url
+        await interaction.followup.send(f"✅ 完了！ダウンロードリンク：\n{url}", ephemeral=True)
+    except Exception as e:
+        await interaction.followup.send(f"❌ エラー発生: {e}", ephemeral=True)
 
-    download_info[id] = {
-        'path': output_path,
-        'expire': time.time() + 3600,
-        'title': title,
-        'thumbnail': thumbnail
-    }
-    threading.Timer(3600, cleanup_file, args=(id,)).start()
-
-    url = f"{BASE_URL}/video/{id}"
-    await interaction.followup.send(f"✅ ダウンロード完了！\n[こちらからダウンロード]({url})", ephemeral=True)
-
-# === コマンド登録 ===
-@tree.command(name="videomp4downloader", description="通常動画をMP4でダウンロード")
+# === コマンド定義 ===
+@tree.command(name="videomp4downloader", description="動画をMP4でダウンロード")
 @app_commands.describe(link="YouTube動画のURL")
 async def videomp4(interaction: Interaction, link: str):
     await handle_download(interaction, link, "bestvideo[ext=mp4]+bestaudio/best", is_audio=False)
 
-@tree.command(name="videomp3downloader", description="通常動画の音声をMP3でダウンロード")
+@tree.command(name="videomp3downloader", description="動画をMP3でダウンロード")
 @app_commands.describe(link="YouTube動画のURL")
 async def videomp3(interaction: Interaction, link: str):
     await handle_download(interaction, link, "bestaudio/best", is_audio=True)
@@ -152,26 +130,21 @@ async def shortmp3(interaction: Interaction, link: str):
 @tree.command(name="botinfo", description="Botの機能一覧を表示")
 async def botinfo(interaction: Interaction):
     msg = (
-        "**📽️ YouTubeダウンローダーBot機能一覧**\n"
-        "・`/videomp4downloader <link>`：通常動画(mp4)\n"
-        "・`/videomp3downloader <link>`：通常音声(mp3)\n"
-        "・`/shortmp4downloader <link>`：Shorts(mp4)\n"
-        "・`/shortmp3downloader <link>`：Shorts音声(mp3)\n"
-        "・全コマンド 3分クールダウン付き\n"
-        "・動画ページにサムネ・タイトル付きダウンロードボタン"
+        "**📽️ YouTube ダウンローダーBot 機能一覧**\n"
+        "・`/videomp4downloader <url>`：動画を MP4\n"
+        "・`/videomp3downloader <url>`：動画を MP3\n"
+        "・`/shortmp4downloader <url>`：Shorts を MP4\n"
+        "・`/shortmp3downloader <url>`：Shorts 音声を MP3\n"
+        "・アップロードは transfer.sh 経由（10GB制限）\n"
+        "・キャッシュ対応・3分間クールダウン"
     )
     await interaction.response.send_message(msg, ephemeral=True)
 
-# === 起動イベント ===
+# === 起動 ===
 @client.event
 async def on_ready():
     await tree.sync()
-    print(f"✅ Bot起動完了: {client.user}")
-
-# === Flask 起動 ===
-def run_flask():
-    app.run(host="0.0.0.0", port=PORT)
+    print(f"✅ Bot 起動完了: {client.user}")
 
 if __name__ == "__main__":
-    threading.Thread(target=run_flask).start()
     client.run(TOKEN)
