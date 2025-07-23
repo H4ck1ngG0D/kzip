@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - ダウンロード</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .video-info {
+            margin-bottom: 30px;
+        }
+        
+        .thumbnail {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+        
+        .title {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        
+        .filename {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 20px;
+            word-break: break-all;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            text-decoration: none;
+            font-size: 1.2em;
+            font-weight: bold;
+            border-radius: 50px;
+            box-shadow: 0 10px 25px rgba(76, 175, 80, 0.3);
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(76, 175, 80, 0.4);
+            background: linear-gradient(45deg, #45a049, #4CAF50);
+        }
+        
+        .download-btn:active {
+            transform: translateY(-1px);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+        
+        .status.ready {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status.processing {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .footer {
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            .title {
+                font-size: 1.2em;
+            }
+            
+            .download-btn {
+                padding: 12px 25px;
+                font-size: 1.1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="video-info">
+            <h1 class="title">📹 {{ title or "YouTube Video" }}</h1>
+            
+            {% if thumbnail %}
+            <img src="{{ thumbnail }}" alt="動画サムネイル" class="thumbnail" onerror="this.style.display='none'">
+            {% endif %}
+            
+            {% if original_filename %}
+            <p class="filename">📁 ファイル名: {{ original_filename }}</p>
+            {% endif %}
+        </div>
+        
+        <a href="/download/{{ id }}" class="download-btn" id="downloadBtn">
+            📥 ダウンロード開始
+        </a>
+        
+        <div id="status" class="status" style="display: none;"></div>
+        
+        <div class="footer">
+            <p>⏰ このリンクは1時間で有効期限が切れます</p>
+            <p>🔒 安全で高速なダウンロード</p>
+        </div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const videoId = '{{ id }}';
+        
+        // ダウンロード状況をチェック
+        function checkStatus() {
+            fetch(`/api/status/${videoId}`)
+                .then(response => response.json())
+                .then(data => {
+                    statusDiv.style.display = 'block';
+                    
+                    switch(data.status) {
+                        case 'ready':
+                            statusDiv.className = 'status ready';
+                            statusDiv.textContent = '✅ ダウンロード準備完了！';
+                            downloadBtn.textContent = '📥 ダウンロード開始';
+                            break;
+                        case 'processing':
+                            statusDiv.className = 'status processing';
+                            statusDiv.textContent = '⏳ ファイル準備中...';
+                            downloadBtn.textContent = '⏳ 準備中...';
+                            setTimeout(checkStatus, 2000);
+                            break;
+                        case 'expired':
+                            statusDiv.className = 'status error';
+                            statusDiv.textContent = '❌ リンクの有効期限が切れています';
+                            downloadBtn.style.display = 'none';
+                            break;
+                        case 'not_found':
+                            statusDiv.className = 'status error';
+                            statusDiv.textContent = '❌ ファイルが見つかりません';
+                            downloadBtn.style.display = 'none';
+                            break;
+                    }
+                })
+                .catch(error => {
+                    console.error('Status check failed:', error);
+                });
+        }
+        
+        // ページ読み込み時にステータスチェック
+        checkStatus();
+        
+        // ダウンロードボタンクリック時の処理
+        downloadBtn.addEventListener('click', function(e) {
+            this.textContent = '📥 ダウンロード中...';
+            this.style.pointerEvents = 'none';
+            
+            // 5秒後にボタンを元に戻す
+            setTimeout(() => {
+                this.textContent = '📥 ダウンロード開始';
+                this.style.pointerEvents = 'auto';
+            }, 5000);
+        });
+    </script>
+</body>
+</html>
