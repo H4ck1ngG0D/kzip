@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エラー - YouTube Downloader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .error-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        .error-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #e74c3c;
+            margin-bottom: 20px;
+        }
+        
+        .error-message {
+            font-size: 1.1em;
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #e74c3c;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .back-btn, .home-btn {
+            display: inline-block;
+            padding: 12px 25px;
+            color: white;
+            text-decoration: none;
+            font-size: 1.1em;
+            font-weight: bold;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .back-btn {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+        }
+        
+        .back-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(52, 152, 219, 0.3);
+        }
+        
+        .home-btn {
+            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
+        }
+        
+        .home-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(149, 165, 166, 0.3);
+        }
+        
+        .error-details {
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #999;
+            font-style: italic;
+        }
+        
+        .help-text {
+            margin-top: 30px;
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 10px;
+            font-size: 0.95em;
+            color: #2d5a2d;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            .error-title {
+                font-size: 1.5em;
+            }
+            
+            .button-group {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .back-btn, .home-btn {
+                width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">❌</div>
+        <h1 class="error-title">エラーが発生しました</h1>
+        <div class="error-message">
+            {{ error or "不明なエラーが発生しました。しばらく時間をおいて再度お試しください。" }}
+        </div>
+        
+        <div class="button-group">
+            <a href="javascript:history.back()" class="back-btn">🔙 戻る</a>
+            <a href="/" class="home-btn">🏠 ホーム</a>
+        </div>
+        
+        <div class="help-text">
+            <strong>💡 よくある解決方法:</strong><br>
+            • ページを再読み込みしてみる<br>
+            • 別のYouTube URLを試してみる<br>
+            • しばらく時間をおいて再度実行する<br>
+            • Discord Botで再度コマンドを実行する
+        </div>
+        
+        <div class="error-details">
+            問題が続く場合は、管理者にお問い合わせください
+        </div>
+    </div>
+
+    <script>
+        // 5秒後に自動で前のページに戻る（オプション）
+        let countdown = 10;
+        const backBtn = document.querySelector('.back-btn');
+        
+        function updateCountdown() {
+            if (countdown > 0) {
+                backBtn.textContent = `🔙 戻る (${countdown}s)`;
+                countdown--;
+                setTimeout(updateCountdown, 1000);
+            } else {
+                // 自動で戻らない設計に変更（ユーザーの意図しない動作を防ぐ）
+                backBtn.textContent = '🔙 戻る';
+            }
+        }
+        
+        // カウントダウンは表示のみ（実際の自動リダイレクトは無効化）
+        // updateCountdown();
+    </script>
+</body>
+</html>
