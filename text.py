@@ -5,6 +5,7 @@ import yt_dlp
 import discord
 from urllib.parse import urlparse
 import logging
+import json
 
 # === ログ設定 ===
 logging.basicConfig(level=logging.INFO)
@@ -50,6 +51,108 @@ def get_safe_filename(info, file_id, is_audio=False):
     title = sanitize_filename(title)
     ext = 'mp3' if is_audio else 'mp4'
     return f"{file_id}_{title}.{ext}"
+
+# === API エンドポイント追加 ===
+@app.route("/api/download", methods=["POST"])
+def api_download():
+    """YouTube動画ダウンロードAPI"""
+    try:
+        # JSON データを取得
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "JSONデータが必要です"}), 400
+        
+        url = data.get("url")
+        format_type = data.get("format", "mp4")  # mp4 または mp3
+        
+        if not url:
+            return jsonify({"error": "URLが必要です"}), 400
+        
+        # URL妥当性チェック
+        if not is_valid_youtube_url(url):
+            return jsonify({"error": "有効なYouTube URLではありません"}), 400
+        
+        # 動画情報取得
+        info = extract_info_safe(url)
+        if not info:
+            return jsonify({"error": "動画情報を取得できませんでした"}), 400
+        
+        # ダウンロード設定
+        is_audio = format_type.lower() == "mp3"
+        fmt = "bestaudio/best" if is_audio else "best[ext=mp4]/best"
+        
+        # ID生成とファイルパス設定
+        file_id = generate_id(url, fmt)
+        title = info.get("title", "Unknown Video")
+        safe_filename = get_safe_filename(info, file_id, is_audio)
+        output_path = os.path.join(DOWNLOAD_FOLDER, safe_filename)
+        
+        # ダウンロード実行
+        try:
+            final_path = download_video_safe(url, output_path, fmt, is_audio)
+        except Exception as e:
+            return jsonify({"error": f"ダウンロード失敗: {str(e)}"}), 500
+        
+        # ダウンロード情報を保存
+        download_info[file_id] = {
+            'path': final_path,
+            'expire': time.time() + 3600,  # 1時間後に期限切れ
+            'title': title,
+            'thumbnail': info.get("thumbnail"),
+            'original_filename': os.path.basename(final_path)
+        }
+        
+        # 1時間後にクリーンアップをスケジュール
+        threading.Timer(3600, cleanup_file, args=(file_id,)).start()
+        
+        # 成功レスポンス
+        download_url = f"{BASE_URL}/video/{file_id}"
+        direct_download_url = f"{BASE_URL}/download/{file_id}"
+        
+        return jsonify({
+            "success": True,
+            "id": file_id,
+            "title": title,
+            "thumbnail": info.get("thumbnail"),
+            "download_page": download_url,
+            "direct_download": direct_download_url,
+            "format": format_type,
+            "expires_at": int(time.time() + 3600),
+            "filename": os.path.basename(final_path)
+        })
+        
+    except Exception as e:
+        logger.error(f"API エラー: {e}")
+        return jsonify({"error": "内部サーバーエラー"}), 500
+
+# === API情報エンドポイント ===
+@app.route("/api/info", methods=["GET"])
+def api_info():
+    """API使用方法の情報"""
+    return jsonify({
+        "api_version": "1.0",
+        "endpoints": {
+            "POST /api/download": {
+                "description": "YouTube動画をダウンロード",
+                "parameters": {
+                    "url": "YouTube動画のURL（必須）",
+                    "format": "mp4 または mp3（デフォルト: mp4）"
+                },
+                "example": {
+                    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                    "format": "mp4"
+                }
+            },
+            "GET /api/status/<id>": {
+                "description": "ダウンロード状況を確認",
+                "response": "ready/processing/expired/not_found"
+            }
+        },
+        "curl_examples": [
+            "curl -X POST -H 'Content-Type: application/json' -d '{\"url\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\"format\":\"mp4\"}' http://localhost:5000/api/download",
+            "curl -X POST -H 'Content-Type: application/json' -d '{\"url\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\",\"format\":\"mp3\"}' http://localhost:5000/api/download"
+        ]
+    })
 
 @app.route("/")
 def index():
