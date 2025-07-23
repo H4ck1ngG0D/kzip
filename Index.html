@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Downloader Bot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 40px;
+            max-width: 800px;
+            width: 90%;
+            text-align: center;
+            animation: fadeInUp 0.8s ease-out;
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .title {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .subtitle {
+            font-size: 1.3em;
+            color: #666;
+            margin-bottom: 40px;
+            font-weight: 300;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .feature {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .feature:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+        }
+        
+        .feature-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            display: block;
+        }
+        
+        .feature-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 12px;
+            color: #333;
+        }
+        
+        .feature-desc {
+            color: #666;
+            font-size: 1em;
+            line-height: 1.5;
+        }
+        
+        .commands-section {
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: left;
+        }
+        
+        .commands-title {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #1976d2;
+        }
+        
+        .command-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+        }
+        
+        .command-item {
+            background: rgba(255,255,255,0.8);
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .command-name {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #1976d2;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+        }
+        
+        .command-desc {
+            color: #666;
+            font-size: 0.95em;
+        }
+        
+        .discord-link {
+            display: inline-block;
+            padding: 18px 40px;
+            background: linear-gradient(45deg, #7289da, #5865f2);
+            color: white;
+            text-decoration: none;
+            font-size: 1.3em;
+            font-weight: bold;
+            border-radius: 50px;
+            box-shadow: 0 12px 30px rgba(114, 137, 218, 0.3);
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+        
+        .discord-link:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 18px 40px rgba(114, 137, 218, 0.4);
+            background: linear-gradient(45deg, #5865f2, #7289da);
+        }
+        
+        .footer-info {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            font-size: 0.95em;
+            color: #666;
+        }
+        
+        .warning {
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            font-size: 0.9em;
+            color: #e65100;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 25px;
+                margin: 20px;
+            }
+            
+            .title {
+                font-size: 2.2em;
+            }
+            
+            .subtitle {
+                font-size: 1.1em;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
+            
+            .command-list {
+                grid-template-columns: 1fr;
+            }
+            
+            .discord-link {
+                padding: 15px 30px;
+                font-size: 1.1em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">📽️ YouTube Downloader</h1>
+        <p class="subtitle">高性能でシンプルなYouTube動画ダウンローダーBot</p>
+        
+        <div class="features">
+            <div class="feature">
+                <span class="feature-icon">🎬</span>
+                <div class="feature-title">高品質動画ダウンロード</div>
+                <div class="feature-desc">YouTube動画を最高品質のMP4形式でダウンロード。HD、4Kにも対応。</div>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">🎵</span>
+                <div class="feature-title">音声抽出</div>
+                <div class="feature-desc">動画から高品質な音声をMP3形式で抽出。音楽だけが欲しい時に最適。</div>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">📱</span>
+                <div class="feature-title">Shorts完全対応</div>
+                <div class="feature-desc">YouTube Shortsも通常動画と同様にダウンロード可能。</div>
+            </div>
+            
+            <div class="feature">
+                <span class="feature-icon">⚡</span>
+                <div class="feature-title">超高速処理</div>
+                <div class="feature-desc">最適化されたエンジンで高速ダウンロード。マルチスレッド対応。</div>
+            </div>
+        </div>
+        
+        <div class="commands-section">
+            <h2 class="commands-title">🤖 Discord Bot コマンド一覧</h2>
+            <div class="command-list">
+                <div class="command-item">
+                    <div class="command-name">/videomp4 [URL]</div>
+                    <div class="command-desc">通常のYouTube動画をMP4でダウンロード</div>
+                </div>
+                <div class="command-item">
+                    <div class="command-name">/videomp3 [URL]</div>
+                    <div class="command-desc">通常のYouTube動画から音声をMP3で抽出</div>
+                </div>
+                <div class="command-item">
+                    <div class="command-name">/shortmp4 [URL]</div>
+                    <div class="command-desc">YouTube ShortsをMP4でダウンロード</div>
+                </div>
+                <div class="command-item">
+                    <div class="command-name">/shortmp3 [URL]</div>
+                    <div class="command-desc">YouTube Shortsから音声をMP3で抽出</div>
+                </div>
+            </div>
+        </div>
+        
+        <p style="margin-bottom: 25px; color: #555; font-size: 1.1em;">
+            <strong>🚀 使い方：</strong> DiscordでBotを招待し、上記コマンドを使用してください
+        </p>
+        
+        <a href="#" class="discord-link" onclick="alert('Discord Bot招待リンクを設定してください')">
+            🤖 Discord Bot を招待
+        </a>
+        
+        <div class="footer-info">
+            <h3 style="margin-bottom: 15px; color: #333;">✨ 特徴</h3>
+            <ul style="text-align: left; list-style: none; padding: 0;">
+                <li style="margin: 8px 0;">🔒 <strong>安全:</strong> プライベートリンクで安全なダウンロード</li>
+                <li style="margin: 8px 0;">⏰ <strong>自動削除:</strong> 1時間後にファイルを自動削除</li>
+                <li style="margin: 8px 0;">🛡️ <strong>スパム対策:</strong> 3分間のクールダウン機能</li>
+                <li style="margin: 8px 0;">📱 <strong>レスポンシブ:</strong> PC・スマホ両対応のUI</li>
+                <li style="margin: 8px 0;">🚀 <strong>高速:</strong> 最新のyt-dlpエンジン使用</li>
+            </ul>
+        </div>
+        
+        <div class="warning">
+            <strong>⚠️ 利用上の注意</strong><br>
+            著作権法を遵守し、個人利用の範囲でご使用ください。商用利用や再配布は禁止されています。
+        </div>
+    </div>
+
+    <script>
+        // ページロード時のアニメーション
+        window.addEventListener('load', function() {
+            document.body.style.opacity = '1';
+        });
+
+        // 特徴カードのホバーエフェクト強化
+        document.querySelectorAll('.feature').forEach(feature => {
+            feature.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-8px) scale(1.02)';
+            });
+            
+            feature.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(0) scale(1)';
+            });
+        });
+
+        // コマンドアイテムのクリックでクリップボードにコピー
+        document.querySelectorAll('.command-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const commandName = this.querySelector('.command-name').textContent;
+                navigator.clipboard.writeText(commandName).then(() => {
+                    // 一時的に背景色を変更してコピー完了を示す
+                    const originalBg = this.style.background;
+                    this.style.background = 'rgba(76, 175, 80, 0.2)';
+                    setTimeout(() => {
+                        this.style.background = originalBg;
+                    }, 500);
+                });
+            });
+            
+            // マウスオーバー時にカーソルを変更
+            item.style.cursor = 'pointer';
+            item.title = 'クリックでコマンドをコピー';
+        });
+    </script>
+</body>
+</html>
