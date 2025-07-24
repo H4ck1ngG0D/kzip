@@ -41,11 +41,7 @@ document.getElementById('processBtn').onclick = async () => {
   // 💀 ノイズ追加（強力）
   sample += (Math.random() * 2 - 1) * 2.0;
 
-  // 🔂 グリッチ破壊（ときどき反転 or 無音）
-  const r = Math.random();
-  if (r < 0.05) sample = -sample;     // 反転
-  else if (r < 0.08) sample = 0;      // 無音化
-  else if (r < 0.10) sample *= 1000;  // 局所爆音化
+  // 🔂 グリッチ破壊（ときどき反転 or 無音
 
   // 💣 歪ませる（歪曲率高）
   sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6);
