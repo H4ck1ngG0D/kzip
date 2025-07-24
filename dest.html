@@ -67,16 +67,6 @@
           log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
 
           for (let i = 0; i < inputData.length; i++) {
-            let sample = inputData[i];
-            sample *= 1e12; // 💥 爆音増幅
-            sample += (Math.random() * 2 - 1) * 2.0; // 💀 ノイズ追加
-            const r = Math.random();
-            if (r < 0.05) sample = -sample;     // 🔁 反転
-            else if (r < 0.08) sample = 0;      // ⛔ 無音化
-            else if (r < 0.10) sample *= 1000;  // 💣 局所爆音
-
-            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6); // 歪ませ
-            outputData[i] = clamp(sample, -1, 1); // 🎧 音割れ制限
           }
         }
 
