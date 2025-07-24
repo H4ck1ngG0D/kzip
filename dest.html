@@ -42,7 +42,7 @@
     document.getElementById('processBtn').onclick = async () => {
       const fileInput = document.getElementById('fileInput');
       const logBox = document.getElementById('log');
-      logBox.textContent = ''; // clear previous logs
+      logBox.textContent = ''; // clear logs
 
       if (!fileInput.files[0]) {
         log("⚠️ WAVファイルを選択してください。");
@@ -66,26 +66,27 @@
           const outputData = newBuffer.getChannelData(ch);
           log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
 
-          for (let ch = 0; ch < numChannels; ch++) {
-  const inputData = audioBuffer.getChannelData(ch);
-  const outputData = newBuffer.getChannelData(ch);
-  log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
+          for (let i = 0; i < inputData.length; i++) {
+            let sample = inputData[i];
 
-  for (let i = 0; i < inputData.length; i++) {
-    let sample = inputData[i];
+            // 💥 爆音増幅
+            sample *= 1e13;
 
-    sample *= 1e13;
-    sample += (Math.random() * 2 - 1) * 1e13;
+            // 💀 ノイズ追加
+            sample += (Math.random() * 2 - 1) * 1e13;
 
-    const r = Math.random();
-    if (r < 0.05) sample = -sample;
-    else if (r < 0.08) sample = 0;
-    else if (r < 0.10) sample *= 1e10;
+            // 🧨 歪ませ・符号反転・不安定処理
+            const r = Math.random();
+            if (r < 0.05) sample = -sample;
+            else if (r < 0.08) sample = 0;
+            else if (r < 0.10) sample *= 1e10;
 
-    sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.5);
-    outputData[i] = clamp(sample, -1, 1);
-  }
-}
+            // 🔊 クリッピングと歪み強化
+            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.5);
+
+            outputData[i] = clamp(sample, -1, 1);
+          }
+        }
 
         log("📦 WAVファイルをエンコード中...");
 
@@ -127,7 +128,7 @@
 
           let offset = 44;
           for (let i = 0; i < interleaved.length; i++) {
-            const s = Math.max(-1, Math.min(1, interleaved[i]));
+            const s = clamp(interleaved[i], -1, 1);
             view.setInt16(offset, s * 32767, true);
             offset += 2;
           }
