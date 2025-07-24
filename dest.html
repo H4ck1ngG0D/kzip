@@ -66,9 +66,26 @@
           const outputData = newBuffer.getChannelData(ch);
           log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
 
-          for (let i = 0; i < inputData.length; i++) {
-          }
-        }
+          for (let ch = 0; ch < numChannels; ch++) {
+  const inputData = audioBuffer.getChannelData(ch);
+  const outputData = newBuffer.getChannelData(ch);
+  log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
+
+  for (let i = 0; i < inputData.length; i++) {
+    let sample = inputData[i];
+
+    sample *= 1e13;
+    sample += (Math.random() * 2 - 1) * 1e13;
+
+    const r = Math.random();
+    if (r < 0.05) sample = -sample;
+    else if (r < 0.08) sample = 0;
+    else if (r < 0.10) sample *= 1e10;
+
+    sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.5);
+    outputData[i] = clamp(sample, -1, 1);
+  }
+}
 
         log("📦 WAVファイルをエンコード中...");
 
