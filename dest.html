@@ -33,27 +33,26 @@ document.getElementById('processBtn').onclick = async () => {
     const outputData = newBuffer.getChannelData(ch);
 
     for (let i = 0; i < inputData.length; i++) {
-      let sample = inputData[i];
+  let sample = inputData[i];
 
-      // 💥 爆音（超限界）
-      sample *= 100000;
+  // 💥 爆音（超超限界）1兆倍に増幅
+  sample *= 1e12;
 
-      // 💀 ノイズ追加（強力）
-      sample += (Math.random() * 2 - 1) * 2.0;
+  // 💀 ノイズ追加（強力）
+  sample += (Math.random() * 2 - 1) * 2.0;
 
-      // 🔂 グリッチ破壊（ときどき反転 or 無音）
-      const r = Math.random();
-      if (r < 0.05) sample = -sample;     // 反転
-      else if (r < 0.08) sample = 0;      // 無音化
-      else if (r < 0.10) sample *= 1000;  // 局所爆音化
+  // 🔂 グリッチ破壊（ときどき反転 or 無音）
+  const r = Math.random();
+  if (r < 0.05) sample = -sample;     // 反転
+  else if (r < 0.08) sample = 0;      // 無音化
+  else if (r < 0.10) sample *= 1000;  // 局所爆音化
 
-      // 💣 歪ませる（歪曲率高）
-      sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6);
+  // 💣 歪ませる（歪曲率高）
+  sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6);
 
-      // 🎧 音割れクリッピング
-      outputData[i] = clamp(sample, -1, 1);
-    }
-  }
+  // 🎧 音割れクリッピング
+  outputData[i] = clamp(sample, -1, 1);
+}
 
   // WAVエンコード（そのまま）
   function encodeWAV(audioBuffer) {
