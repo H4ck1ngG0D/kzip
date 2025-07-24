@@ -12,101 +12,104 @@
 
   <script>
     function clamp(x, min, max) {
-      return Math.max(min, Math.min(max, x));
+  return Math.max(min, Math.min(max, x));
+}
+
+document.getElementById('processBtn').onclick = async () => {
+  const fileInput = document.getElementById('fileInput');
+  if (!fileInput.files[0]) return alert("WAVファイルを選んでください。");
+
+  const arrayBuffer = await fileInput.files[0].arrayBuffer();
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  const numChannels = audioBuffer.numberOfChannels;
+  const length = audioBuffer.length;
+  const sampleRate = audioBuffer.sampleRate;
+  const newBuffer = audioCtx.createBuffer(numChannels, length, sampleRate);
+
+  for (let ch = 0; ch < numChannels; ch++) {
+    const inputData = audioBuffer.getChannelData(ch);
+    const outputData = newBuffer.getChannelData(ch);
+
+    for (let i = 0; i < inputData.length; i++) {
+      let sample = inputData[i];
+
+      // 💥 爆音（超限界）
+      sample *= 100000;
+
+      // 💀 ノイズ追加（強力）
+      sample += (Math.random() * 2 - 1) * 2.0;
+
+      // 🔂 グリッチ破壊（ときどき反転 or 無音）
+      const r = Math.random();
+      if (r < 0.05) sample = -sample;     // 反転
+      else if (r < 0.08) sample = 0;      // 無音化
+      else if (r < 0.10) sample *= 1000;  // 局所爆音化
+
+      // 💣 歪ませる（歪曲率高）
+      sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6);
+
+      // 🎧 音割れクリッピング
+      outputData[i] = clamp(sample, -1, 1);
+    }
+  }
+
+  // WAVエンコード（そのまま）
+  function encodeWAV(audioBuffer) {
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const length = audioBuffer.length;
+    const interleaved = new Float32Array(length * numChannels);
+
+    for (let ch = 0; ch < numChannels; ch++) {
+      const channelData = audioBuffer.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        interleaved[i * numChannels + ch] = channelData[i];
+      }
     }
 
-    document.getElementById('processBtn').onclick = async () => {
-      const fileInput = document.getElementById('fileInput');
-      if (!fileInput.files[0]) return alert("WAVファイルを選んでください。");
+    const buffer = new ArrayBuffer(44 + interleaved.length * 2);
+    const view = new DataView(buffer);
 
-      const arrayBuffer = await fileInput.files[0].arrayBuffer();
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-
-      // 爆音処理
-      const numChannels = audioBuffer.numberOfChannels;
-      const length = audioBuffer.length;
-      const sampleRate = audioBuffer.sampleRate;
-      const newBuffer = audioCtx.createBuffer(numChannels, length, sampleRate);
-
-      for (let ch = 0; ch < numChannels; ch++) {
-        const inputData = audioBuffer.getChannelData(ch);
-        const outputData = newBuffer.getChannelData(ch);
-
-        for (let i = 0; i < inputData.length; i++) {
-          // 元データ
-          let sample = inputData[i];
-
-          // 💥 増幅（爆音）
-          sample *= 5000;
-
-          // 💀 ノイズ追加
-          sample += (Math.random() * 2 - 1) * 0.7;
-
-          // 💣 歪ませる
-          sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.9);
-
-          // 🎧 クリッピング（音割れ）
-          outputData[i] = clamp(sample, -1, 1);
-        }
+    function writeString(offset, str) {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
       }
+    }
 
-      // WAVエンコードしてBlob化
-      function encodeWAV(audioBuffer) {
-        const numChannels = audioBuffer.numberOfChannels;
-        const sampleRate = audioBuffer.sampleRate;
-        const length = audioBuffer.length;
-        const interleaved = new Float32Array(length * numChannels);
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + interleaved.length * 2, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * 2, true);
+    view.setUint16(32, numChannels * 2, true);
+    view.setUint16(34, 16, true);
+    writeString(36, 'data');
+    view.setUint32(40, interleaved.length * 2, true);
 
-        for (let ch = 0; ch < numChannels; ch++) {
-          const channelData = audioBuffer.getChannelData(ch);
-          for (let i = 0; i < length; i++) {
-            interleaved[i * numChannels + ch] = channelData[i];
-          }
-        }
+    let offset = 44;
+    for (let i = 0; i < interleaved.length; i++) {
+      const s = Math.max(-1, Math.min(1, interleaved[i]));
+      view.setInt16(offset, s * 32767, true);
+      offset += 2;
+    }
 
-        const buffer = new ArrayBuffer(44 + interleaved.length * 2);
-        const view = new DataView(buffer);
+    return new Blob([view], { type: 'audio/wav' });
+  }
 
-        function writeString(offset, str) {
-          for (let i = 0; i < str.length; i++) {
-            view.setUint8(offset + i, str.charCodeAt(i));
-          }
-        }
-
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + interleaved.length * 2, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true); // PCM
-        view.setUint16(20, 1, true);  // PCM format
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numChannels * 2, true); // byte rate
-        view.setUint16(32, numChannels * 2, true); // block align
-        view.setUint16(34, 16, true); // bits/sample
-        writeString(36, 'data');
-        view.setUint32(40, interleaved.length * 2, true);
-
-        // PCM変換（-1.0〜1.0 を int16へ）
-        let offset = 44;
-        for (let i = 0; i < interleaved.length; i++) {
-          const s = Math.max(-1, Math.min(1, interleaved[i]));
-          view.setInt16(offset, s * 32767, true);
-          offset += 2;
-        }
-
-        return new Blob([view], { type: 'audio/wav' });
-      }
-
-      const wavBlob = encodeWAV(newBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const link = document.getElementById('downloadLink');
-      link.href = url;
-      link.download = 'destroyed.wav';
-      link.style.display = 'inline';
-      link.textContent = '🎧 爆音WAVダウンロード';
-    };
+  const wavBlob = encodeWAV(newBuffer);
+  const url = URL.createObjectURL(wavBlob);
+  const link = document.getElementById('downloadLink');
+  link.href = url;
+  link.download = 'destroyed_MAX.wav';
+  link.style.display = 'inline';
+  link.textContent = '🎧 完全破壊WAVダウンロード';
+};
   </script>
 </body>
 </html>
