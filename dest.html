@@ -1,128 +1,147 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>WAV Destroyer</title>
-  <style>
-    body { font-family: sans-serif; padding: 2em; }
-    #log { background: #111; color: #0f0; padding: 1em; margin-top: 1em; white-space: pre-wrap; font-size: 14px; }
-  </style>
+  <meta charset="UTF-8">
+  <title>WAV Destroyer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 2em;
+    }
+    #log {
+      background: #111;
+      color: #0f0;
+      padding: 1em;
+      margin-top: 1em;
+      white-space: pre-wrap;
+      font-size: 14px;
+      height: 200px;
+      overflow-y: auto;
+      border-radius: 8px;
+    }
+  </style>
 </head>
 <body>
-  <h1>💥 WAV 爆音破壊ツール</h1>
-  <input type="file" id="fileInput" accept=".wav">
-  <button id="processBtn">破壊する</button>
-  <a id="downloadLink" style="display:none;">🔊 ダウンロード</a>
+  <h1>💥 WAV 爆音破壊ツール</h1>
+  <input type="file" id="fileInput" accept=".wav">
+  <button id="processBtn">破壊する</button>
+  <a id="downloadLink" style="display:none;">🔊 ダウンロード</a>
+  <div id="log"></div>
 
-  <div id="log"></div>
+  <script>
+    function clamp(x, min, max) {
+      return Math.max(min, Math.min(max, x));
+    }
 
-  <script>
-    function clamp(x, min, max) {
-      return Math.max(min, Math.min(max, x));
-    }
+    function log(msg) {
+      const logBox = document.getElementById('log');
+      logBox.textContent += msg + '\n';
+      logBox.scrollTop = logBox.scrollHeight;
+    }
 
-    function log(msg) {
-      const logBox = document.getElementById('log');
-      logBox.textContent += msg + '\n';
-    }
+    document.getElementById('processBtn').onclick = async () => {
+      const fileInput = document.getElementById('fileInput');
+      const logBox = document.getElementById('log');
+      logBox.textContent = ''; // clear previous logs
 
-    document.getElementById('processBtn').onclick = async () => {
-      const fileInput = document.getElementById('fileInput');
-      const logBox = document.getElementById('log');
-      logBox.textContent = ""; // clear log
+      if (!fileInput.files[0]) {
+        log("⚠️ WAVファイルを選択してください。");
+        return;
+      }
 
-      if (!fileInput.files[0]) return alert("WAVファイルを選んでください。");
+      try {
+        log("🔄 ファイル読み込み中...");
+        const arrayBuffer = await fileInput.files[0].arrayBuffer();
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        log("✅ デコード完了。処理開始...");
 
-      log("🔄 ファイル読み込み中...");
-      const arrayBuffer = await fileInput.files[0].arrayBuffer();
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        const numChannels = audioBuffer.numberOfChannels;
+        const length = audioBuffer.length;
+        const sampleRate = audioBuffer.sampleRate;
+        const newBuffer = audioCtx.createBuffer(numChannels, length, sampleRate);
 
-      log("🎧 オーディオデコード完了。処理開始...");
+        for (let ch = 0; ch < numChannels; ch++) {
+          const inputData = audioBuffer.getChannelData(ch);
+          const outputData = newBuffer.getChannelData(ch);
+          log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
 
-      const numChannels = audioBuffer.numberOfChannels;
-      const length = audioBuffer.length;
-      const sampleRate = audioBuffer.sampleRate;
-      const newBuffer = audioCtx.createBuffer(numChannels, length, sampleRate);
+          for (let i = 0; i < inputData.length; i++) {
+            let sample = inputData[i];
+            sample *= 1e12; // 💥 爆音増幅
+            sample += (Math.random() * 2 - 1) * 2.0; // 💀 ノイズ追加
+            const r = Math.random();
+            if (r < 0.05) sample = -sample;     // 🔁 反転
+            else if (r < 0.08) sample = 0;      // ⛔ 無音化
+            else if (r < 0.10) sample *= 1000;  // 💣 局所爆音
 
-      for (let ch = 0; ch < numChannels; ch++) {
-        const inputData = audioBuffer.getChannelData(ch);
-        const outputData = newBuffer.getChannelData(ch);
+            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6); // 歪ませ
+            outputData[i] = clamp(sample, -1, 1); // 🎧 音割れ制限
+          }
+        }
 
-        log(`💣 チャンネル${ch + 1} 処理中...`);
-        for (let i = 0; i < inputData.length; i++) {
-          let sample = inputData[i];
+        log("📦 WAVファイルをエンコード中...");
 
-          sample *= 1e12; // 💥 爆音増幅
-          sample += (Math.random() * 2 - 1) * 2.0; // 💀 ノイズ
-          const r = Math.random();
-          if (r < 0.05) sample = -sample;
-          else if (r < 0.08) sample = 0;
-          else if (r < 0.10) sample *= 1000;
+        function encodeWAV(audioBuffer) {
+          const numChannels = audioBuffer.numberOfChannels;
+          const sampleRate = audioBuffer.sampleRate;
+          const length = audioBuffer.length;
+          const interleaved = new Float32Array(length * numChannels);
 
-          sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.6);
-          outputData[i] = clamp(sample, -1, 1);
-        }
-      }
+          for (let ch = 0; ch < numChannels; ch++) {
+            const channelData = audioBuffer.getChannelData(ch);
+            for (let i = 0; i < length; i++) {
+              interleaved[i * numChannels + ch] = channelData[i];
+            }
+          }
 
-      log("📦 WAVエンコード中...");
+          const buffer = new ArrayBuffer(44 + interleaved.length * 2);
+          const view = new DataView(buffer);
 
-      function encodeWAV(audioBuffer) {
-        const numChannels = audioBuffer.numberOfChannels;
-        const sampleRate = audioBuffer.sampleRate;
-        const length = audioBuffer.length;
-        const interleaved = new Float32Array(length * numChannels);
+          function writeString(offset, str) {
+            for (let i = 0; i < str.length; i++) {
+              view.setUint8(offset + i, str.charCodeAt(i));
+            }
+          }
 
-        for (let ch = 0; ch < numChannels; ch++) {
-          const channelData = audioBuffer.getChannelData(ch);
-          for (let i = 0; i < length; i++) {
-            interleaved[i * numChannels + ch] = channelData[i];
-          }
-        }
+          writeString(0, 'RIFF');
+          view.setUint32(4, 36 + interleaved.length * 2, true);
+          writeString(8, 'WAVE');
+          writeString(12, 'fmt ');
+          view.setUint32(16, 16, true);
+          view.setUint16(20, 1, true);
+          view.setUint16(22, numChannels, true);
+          view.setUint32(24, sampleRate, true);
+          view.setUint32(28, sampleRate * numChannels * 2, true);
+          view.setUint16(32, numChannels * 2, true);
+          view.setUint16(34, 16, true);
+          writeString(36, 'data');
+          view.setUint32(40, interleaved.length * 2, true);
 
-        const buffer = new ArrayBuffer(44 + interleaved.length * 2);
-        const view = new DataView(buffer);
+          let offset = 44;
+          for (let i = 0; i < interleaved.length; i++) {
+            const s = Math.max(-1, Math.min(1, interleaved[i]));
+            view.setInt16(offset, s * 32767, true);
+            offset += 2;
+          }
 
-        function writeString(offset, str) {
-          for (let i = 0; i < str.length; i++) {
-            view.setUint8(offset + i, str.charCodeAt(i));
-          }
-        }
+          return new Blob([view], { type: 'audio/wav' });
+        }
 
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + interleaved.length * 2, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * numChannels * 2, true);
-        view.setUint16(32, numChannels * 2, true);
-        view.setUint16(34, 16, true);
-        writeString(36, 'data');
-        view.setUint32(40, interleaved.length * 2, true);
+        const wavBlob = encodeWAV(newBuffer);
+        const url = URL.createObjectURL(wavBlob);
+        const link = document.getElementById('downloadLink');
+        link.href = url;
+        link.download = 'destroyed_MAX.wav';
+        link.style.display = 'inline';
+        link.textContent = '🎧 完全破壊WAVダウンロード';
 
-        let offset = 44;
-        for (let i = 0; i < interleaved.length; i++) {
-          const s = Math.max(-1, Math.min(1, interleaved[i]));
-          view.setInt16(offset, s * 32767, true);
-          offset += 2;
-        }
-
-        return new Blob([view], { type: 'audio/wav' });
-      }
-
-      const wavBlob = encodeWAV(newBuffer);
-      const url = URL.createObjectURL(wavBlob);
-      const link = document.getElementById('downloadLink');
-      link.href = url;
-      link.download = 'destroyed_MAX.wav';
-      link.style.display = 'inline';
-      link.textContent = '🎧 完全破壊WAVダウンロード';
-
-      log("✅ 完了！爆音WAVをダウンロードできます！");
-    };
-  </script>
+        log("✅ 完了！WAVファイルをダウンロード可能です。");
+      } catch (e) {
+        log("❌ エラーが発生しました: " + e.message);
+        console.error(e);
+      }
+    };
+  </script>
 </body>
 </html>
