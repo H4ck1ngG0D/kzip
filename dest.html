@@ -4,33 +4,65 @@
   <meta charset="UTF-8">
   <title>音割れツール</title>
   <style>
-    body { background: #111; color: #fff; font-family: monospace; text-align: center; padding: 20px; }
-    input { margin: 10px; }
+    body {
+      background: #111;
+      color: #fff;
+      font-family: monospace;
+      text-align: center;
+      padding: 40px;
+      font-size: 20px;
+    }
+    input, button {
+      margin: 15px;
+      padding: 10px 20px;
+      font-size: 18px;
+    }
     #log {
       background: #000;
       color: #0f0;
-      font-size: 14px;
-      padding: 10px;
-      margin-top: 20px;
-      height: 150px;
+      font-size: 16px;
+      padding: 15px;
+      margin-top: 30px;
+      height: 200px;
       overflow-y: auto;
-      border: 1px solid #444;
+      border: 2px solid #444;
+      white-space: pre-wrap;
+      text-align: left;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
     }
   </style>
 </head>
 <body>
-  <h1>音割れツール（WAV/MP3対応）</h1>
+  <h1>🔊 音割れツール（WAV/MP3対応）</h1>
   <input type="file" id="audioFile" accept=".wav, .mp3">
+  <br>
   <button onclick="processAudio()">音割れさせる</button>
+  <button onclick="downloadWav()">ダウンロード</button>
   <div id="log">ログ:</div>
+
   <script>
     let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     let sourceNode;
+    let processedBuffer;
 
     function log(msg) {
       const logDiv = document.getElementById("log");
       logDiv.innerText += "\n" + msg;
       logDiv.scrollTop = logDiv.scrollHeight;
+    }
+
+    function makeDistortionCurve(amount = 600) {
+      const k = typeof amount === 'number' ? amount : 50;
+      const n_samples = 44100;
+      const curve = new Float32Array(n_samples);
+      const deg = Math.PI / 180;
+      for (let i = 0; i < n_samples; ++i) {
+        const x = i * 2 / n_samples - 1;
+        curve[i] = (3 + k) * x * 20 * deg / (Math.PI + k * Math.abs(x));
+      }
+      return curve;
     }
 
     async function processAudio() {
@@ -46,17 +78,16 @@
 
       try {
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+        processedBuffer = audioBuffer;
         const bufferSource = audioCtx.createBufferSource();
         bufferSource.buffer = audioBuffer;
 
-        // 音割れさせるために過剰にゲインを上げる
         const gainNode = audioCtx.createGain();
-        gainNode.gain.value = 10.0;  // 通常の音量の10倍
+        gainNode.gain.value = 25.0;
 
-        // エフェクト（クリッピング）を追加
         const waveShaper = audioCtx.createWaveShaper();
-        waveShaper.curve = new Float32Array([ -1, -0.8, 0, 0.8, 1 ]); // 超単純な波形クリップ
-        waveShaper.oversample = "4x";
+        waveShaper.curve = makeDistortionCurve(900); // より激しい音割れ
+        waveShaper.oversample = '4x';
 
         bufferSource.connect(gainNode);
         gainNode.connect(waveShaper);
@@ -64,10 +95,75 @@
 
         bufferSource.start();
         sourceNode = bufferSource;
-        log("再生開始（音割れ効果あり）");
+        log("再生開始（爆音＋音割れ）");
       } catch (e) {
         log("エラー: " + e.message);
       }
+    }
+
+    function downloadWav() {
+      if (!processedBuffer) {
+        log("処理された音声がありません。先に音割れさせてください。");
+        return;
+      }
+
+      const length = processedBuffer.length;
+      const sampleRate = processedBuffer.sampleRate;
+      const numChannels = processedBuffer.numberOfChannels;
+      const interleaved = new Float32Array(length * numChannels);
+
+      for (let channel = 0; channel < numChannels; channel++) {
+        const data = processedBuffer.getChannelData(channel);
+        for (let i = 0; i < length; i++) {
+          interleaved[i * numChannels + channel] = data[i];
+        }
+      }
+
+      const wavBuffer = encodeWAV(interleaved, sampleRate, numChannels);
+      const blob = new Blob([wavBuffer], { type: 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "onoware.wav";
+      a.click();
+      log("WAVファイルを生成・ダウンロードしました。");
+    }
+
+    function encodeWAV(samples, sampleRate, numChannels) {
+      const buffer = new ArrayBuffer(44 + samples.length * 2);
+      const view = new DataView(buffer);
+
+      function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      function floatTo16BitPCM(output, offset, input) {
+        for (let i = 0; i < input.length; i++, offset += 2) {
+          let s = Math.max(-1, Math.min(1, input[i]));
+          s = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          output.setInt16(offset, s, true);
+        }
+      }
+
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + samples.length * 2, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * 2, true);
+      view.setUint16(32, numChannels * 2, true);
+      view.setUint16(34, 16, true);
+      writeString(view, 36, 'data');
+      view.setUint32(40, samples.length * 2, true);
+
+      floatTo16BitPCM(view, 44, samples);
+      return view;
     }
   </script>
 </body>
