@@ -2,139 +2,73 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>💥 WAV 破壊爆音メーカー</title>
+  <title>音割れツール</title>
   <style>
-    body { font-family: sans-serif; padding: 2em; background: #111; color: #fff; }
-    #log { background: #222; color: #0f0; padding: 1em; margin-top: 1em; white-space: pre-wrap; height: 200px; overflow-y: auto; border-radius: 8px; }
-    button, input { font-size: 16px; padding: 0.5em 1em; margin-top: 1em; }
+    body { background: #111; color: #fff; font-family: monospace; text-align: center; padding: 20px; }
+    input { margin: 10px; }
+    #log {
+      background: #000;
+      color: #0f0;
+      font-size: 14px;
+      padding: 10px;
+      margin-top: 20px;
+      height: 150px;
+      overflow-y: auto;
+      border: 1px solid #444;
+    }
   </style>
 </head>
 <body>
-  <h1>💥 WAV 破壊爆音メーカー</h1>
-  <input type="file" id="fileInput" accept=".wav">
-  <button id="processBtn">🎛️ 爆音にする</button>
-  <a id="downloadLink" style="display:none;">🔊 ダウンロード</a>
-  <div id="log"></div>
-
+  <h1>音割れツール（WAV/MP3対応）</h1>
+  <input type="file" id="audioFile" accept=".wav, .mp3">
+  <button onclick="processAudio()">音割れさせる</button>
+  <div id="log">ログ:</div>
   <script>
-    function clamp(x, min, max) {
-      return Math.max(min, Math.min(max, x));
-    }
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let sourceNode;
 
     function log(msg) {
-      const logBox = document.getElementById('log');
-      logBox.textContent += msg + '\n';
-      logBox.scrollTop = logBox.scrollHeight;
+      const logDiv = document.getElementById("log");
+      logDiv.innerText += "\n" + msg;
+      logDiv.scrollTop = logDiv.scrollHeight;
     }
 
-    document.getElementById('processBtn').onclick = async () => {
-      const fileInput = document.getElementById('fileInput');
-      const logBox = document.getElementById('log');
-      logBox.textContent = '';
-
-      if (!fileInput.files[0]) {
-        log("⚠️ WAVファイルを選んでください");
+    async function processAudio() {
+      const fileInput = document.getElementById("audioFile");
+      if (!fileInput.files.length) {
+        log("ファイルが選択されていません");
         return;
       }
 
+      const file = fileInput.files[0];
+      log(`読み込み中: ${file.name}`);
+      const arrayBuffer = await file.arrayBuffer();
+
       try {
-        log("🔄 読み込み中...");
-        const arrayBuffer = await fileInput.files[0].arrayBuffer();
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        log("✅ デコード完了");
+        const bufferSource = audioCtx.createBufferSource();
+        bufferSource.buffer = audioBuffer;
 
-        const numChannels = audioBuffer.numberOfChannels;
-        const length = audioBuffer.length;
-        const sampleRate = audioBuffer.sampleRate;
-        const newBuffer = audioCtx.createBuffer(numChannels, length, sampleRate);
+        // 音割れさせるために過剰にゲインを上げる
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = 10.0;  // 通常の音量の10倍
 
-        for (let ch = 0; ch < numChannels; ch++) {
-          const inputData = audioBuffer.getChannelData(ch);
-          const outputData = newBuffer.getChannelData(ch);
-          log(`🔥 チャンネル ${ch + 1} 爆音処理中...`);
+        // エフェクト（クリッピング）を追加
+        const waveShaper = audioCtx.createWaveShaper();
+        waveShaper.curve = new Float32Array([ -1, -0.8, 0, 0.8, 1 ]); // 超単純な波形クリップ
+        waveShaper.oversample = "4x";
 
-          for (let i = 0; i < inputData.length; i++) {
-            let sample = inputData[i];
+        bufferSource.connect(gainNode);
+        gainNode.connect(waveShaper);
+        waveShaper.connect(audioCtx.destination);
 
-            // 🔊 爆音増幅（大きくしすぎない範囲で最大）
-            sample *= 1e5;
-
-            // 💀 ホワイトノイズ + 低周波ノイズ
-            sample += (Math.random() * 2 - 1) * 5000;
-            if (i % 100 < 50) sample *= -1; // 軽い振動
-
-            // 🧨 歪ませ処理
-            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.01);
-
-            // ⚠️ 最終クリッピング（Float32範囲で制御）
-            if (isNaN(sample)) sample = 0;
-            outputData[i] = clamp(sample, -1, 1);
-          }
-        }
-
-        log("📦 書き出し中...");
-
-        function encodeWAV(audioBuffer) {
-          const numChannels = audioBuffer.numberOfChannels;
-          const sampleRate = audioBuffer.sampleRate;
-          const length = audioBuffer.length;
-          const interleaved = new Float32Array(length * numChannels);
-
-          for (let ch = 0; ch < numChannels; ch++) {
-            const channelData = audioBuffer.getChannelData(ch);
-            for (let i = 0; i < length; i++) {
-              interleaved[i * numChannels + ch] = channelData[i];
-            }
-          }
-
-          const buffer = new ArrayBuffer(44 + interleaved.length * 2);
-          const view = new DataView(buffer);
-
-          function writeString(offset, str) {
-            for (let i = 0; i < str.length; i++) {
-              view.setUint8(offset + i, str.charCodeAt(i));
-            }
-          }
-
-          writeString(0, 'RIFF');
-          view.setUint32(4, 36 + interleaved.length * 2, true);
-          writeString(8, 'WAVE');
-          writeString(12, 'fmt ');
-          view.setUint32(16, 16, true);
-          view.setUint16(20, 1, true);
-          view.setUint16(22, numChannels, true);
-          view.setUint32(24, sampleRate, true);
-          view.setUint32(28, sampleRate * numChannels * 2, true);
-          view.setUint16(32, numChannels * 2, true);
-          view.setUint16(34, 16, true);
-          writeString(36, 'data');
-          view.setUint32(40, interleaved.length * 2, true);
-
-          let offset = 44;
-          for (let i = 0; i < interleaved.length; i++) {
-            const s = clamp(interleaved[i], -1, 1);
-            view.setInt16(offset, s * 32767, true);
-            offset += 2;
-          }
-
-          return new Blob([view], { type: 'audio/wav' });
-        }
-
-        const wavBlob = encodeWAV(newBuffer);
-        const url = URL.createObjectURL(wavBlob);
-        const link = document.getElementById('downloadLink');
-        link.href = url;
-        link.download = '💥_爆音破壊.wav';
-        link.style.display = 'inline';
-        link.textContent = '🎧 ダウンロード: 爆音完成';
-
-        log("✅ 完了！");
+        bufferSource.start();
+        sourceNode = bufferSource;
+        log("再生開始（音割れ効果あり）");
       } catch (e) {
-        log("❌ エラー: " + e.message);
-        console.error(e);
+        log("エラー: " + e.message);
       }
-    };
+    }
   </script>
 </body>
 </html>
