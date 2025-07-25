@@ -2,29 +2,17 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>WAV Destroyer</title>
+  <title>💥 WAV 破壊爆音メーカー</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 2em;
-    }
-    #log {
-      background: #111;
-      color: #0f0;
-      padding: 1em;
-      margin-top: 1em;
-      white-space: pre-wrap;
-      font-size: 14px;
-      height: 200px;
-      overflow-y: auto;
-      border-radius: 8px;
-    }
+    body { font-family: sans-serif; padding: 2em; background: #111; color: #fff; }
+    #log { background: #222; color: #0f0; padding: 1em; margin-top: 1em; white-space: pre-wrap; height: 200px; overflow-y: auto; border-radius: 8px; }
+    button, input { font-size: 16px; padding: 0.5em 1em; margin-top: 1em; }
   </style>
 </head>
 <body>
-  <h1>💥 WAV 爆音破壊ツール</h1>
+  <h1>💥 WAV 破壊爆音メーカー</h1>
   <input type="file" id="fileInput" accept=".wav">
-  <button id="processBtn">破壊する</button>
+  <button id="processBtn">🎛️ 爆音にする</button>
   <a id="downloadLink" style="display:none;">🔊 ダウンロード</a>
   <div id="log"></div>
 
@@ -42,19 +30,19 @@
     document.getElementById('processBtn').onclick = async () => {
       const fileInput = document.getElementById('fileInput');
       const logBox = document.getElementById('log');
-      logBox.textContent = ''; // clear logs
+      logBox.textContent = '';
 
       if (!fileInput.files[0]) {
-        log("⚠️ WAVファイルを選択してください。");
+        log("⚠️ WAVファイルを選んでください");
         return;
       }
 
       try {
-        log("🔄 ファイル読み込み中...");
+        log("🔄 読み込み中...");
         const arrayBuffer = await fileInput.files[0].arrayBuffer();
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-        log("✅ デコード完了。処理開始...");
+        log("✅ デコード完了");
 
         const numChannels = audioBuffer.numberOfChannels;
         const length = audioBuffer.length;
@@ -64,31 +52,28 @@
         for (let ch = 0; ch < numChannels; ch++) {
           const inputData = audioBuffer.getChannelData(ch);
           const outputData = newBuffer.getChannelData(ch);
-          log(`🎚️ チャンネル ${ch + 1} を爆音変換中...`);
+          log(`🔥 チャンネル ${ch + 1} 爆音処理中...`);
 
           for (let i = 0; i < inputData.length; i++) {
             let sample = inputData[i];
 
-            // 💥 爆音増幅
-            sample *= 1e13;
+            // 🔊 爆音増幅（大きくしすぎない範囲で最大）
+            sample *= 1e5;
 
-            // 💀 ノイズ追加
-            sample += (Math.random() * 2 - 1) * 1e13;
+            // 💀 ホワイトノイズ + 低周波ノイズ
+            sample += (Math.random() * 2 - 1) * 5000;
+            if (i % 100 < 50) sample *= -1; // 軽い振動
 
-            // 🧨 歪ませ・符号反転・不安定処理
-            const r = Math.random();
-            if (r < 0.05) sample = -sample;
-            else if (r < 0.08) sample = 0;
-            else if (r < 0.10) sample *= 1e10;
+            // 🧨 歪ませ処理
+            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.01);
 
-            // 🔊 クリッピングと歪み強化
-            sample = Math.sign(sample) * Math.pow(Math.abs(sample), 0.5);
-
+            // ⚠️ 最終クリッピング（Float32範囲で制御）
+            if (isNaN(sample)) sample = 0;
             outputData[i] = clamp(sample, -1, 1);
           }
         }
 
-        log("📦 WAVファイルをエンコード中...");
+        log("📦 書き出し中...");
 
         function encodeWAV(audioBuffer) {
           const numChannels = audioBuffer.numberOfChannels;
@@ -140,13 +125,13 @@
         const url = URL.createObjectURL(wavBlob);
         const link = document.getElementById('downloadLink');
         link.href = url;
-        link.download = 'destroyed_MAX.wav';
+        link.download = '💥_爆音破壊.wav';
         link.style.display = 'inline';
-        link.textContent = '🎧 完全破壊WAVダウンロード';
+        link.textContent = '🎧 ダウンロード: 爆音完成';
 
-        log("✅ 完了！WAVファイルをダウンロード可能です。");
+        log("✅ 完了！");
       } catch (e) {
-        log("❌ エラーが発生しました: " + e.message);
+        log("❌ エラー: " + e.message);
         console.error(e);
       }
     };
