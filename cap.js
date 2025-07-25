@@ -1,6 +1,6 @@
 // cap.js
 
-const API_BASE = "https://2458a847af23-2000.shironekousercontent.paicha.dev";
+const API_BASE = "https://9f941ca98f60-2000.shironekousercontent.paicha.dev";
 
 export function initCaptcha(containerId, options = {}) {
     const container = document.getElementById(containerId);
