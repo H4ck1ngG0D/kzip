@@ -2,6 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import tasks
 import requests
+import aiohttp
 import asyncio
 import random
 from datetime import datetime
@@ -29,14 +30,30 @@ IPROYAL_PROXIES = [
 ]
 
 # Validate token by checking if it can fetch user info
-def validate_token(token, proxy=None):
+async def validate_token(token, proxy=None):
     headers = {'Authorization': token}
-    proxies = {'http': proxy, 'https': proxy} if proxy else None
-    try:
-        response = requests.get('https://discord.com/api/v10/users/@me', headers=headers, proxies=proxies, timeout=10)
-        return response.status_code == 200
-    except requests.RequestException:
-        return False
+    async with aiohttp.ClientSession() as session:
+        # Try without proxy first
+        try:
+            async with session.get('https://discord.com/api/v10/users/@me', headers=headers, timeout=3) as response:
+                if response.status == 200:
+                    return True, "Token validated successfully without proxy."
+                else:
+                    error_msg = f"Failed without proxy: {response.status} {await response.text()[:100]}"
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            error_msg = f"Failed without proxy: {str(e)}"
+
+        # If proxy is provided, try with proxy
+        if proxy:
+            try:
+                async with session.get('https://discord.com/api/v10/users/@me', headers=headers, proxy=proxy, timeout=3) as response:
+                    if response.status == 200:
+                        return True, f"Token validated successfully with proxy {proxy}."
+                    else:
+                        return False, f"{error_msg} | Failed with proxy: {response.status} {await response.text()[:100]}"
+            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+                return False, f"{error_msg} | Failed with proxy: {str(e)}"
+        return False, error_msg
 
 # Join server using a token, invite code, and optional proxy
 def join_server(token, invite_code, proxy=None):
@@ -84,17 +101,18 @@ async def savetoken(interaction: discord.Interaction, token: str):
     if user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
         proxy = random.choice(user_proxies[user_id])
 
-    if validate_token(token, proxy):
+    is_valid, error_message = await validate_token(token, proxy)
+    if is_valid:
         if token not in user_tokens[user_id]:
             user_tokens[user_id].append(token)
             await interaction.response.send_message(
-                f"Token saved successfully! You have {len(user_tokens[user_id])} tokens saved.",
+                f"Token saved successfully! You have {len(user_tokens[user_id])} tokens saved. ({error_message})",
                 ephemeral=True
             )
         else:
             await interaction.response.send_message("This token is already saved.", ephemeral=True)
     else:
-        await interaction.response.send_message("Error: Invalid or expired token.", ephemeral=True)
+        await interaction.response.send_message(f"Error: Invalid or expired token. Details: {error_message}", ephemeral=True)
 
 @app_commands.command(name="loadtokenfile", description="Load multiple tokens from a .txt file")
 async def loadtokenfile(interaction: discord.Interaction, file: discord.Attachment):
@@ -114,9 +132,13 @@ async def loadtokenfile(interaction: discord.Interaction, file: discord.Attachme
 
             for token in tokens:
                 token = token.strip()
-                if token and token not in user_tokens[user_id] and validate_token(token, proxy):
-                    user_tokens[user_id].append(token)
-                    valid_tokens.append(token)
+                if token and token not in user_tokens[user_id]:
+                    is_valid, _ = await validate_token(token, proxy)
+                    if is_valid:
+                        user_tokens[user_id].append(token)
+                        valid_tokens.append(token)
+                    else:
+                        invalid_count += 1
                 else:
                     invalid_count += 1
 
@@ -136,11 +158,30 @@ async def proxyload(interaction: discord.Interaction, file: discord.Attachment):
         try:
             content = await file.read()
             proxies = content.decode('utf-8').splitlines()
-            valid_proxies = [p.strip() for p in proxies if p.strip()]
+            valid_proxies = []
+            invalid_count = 0
+
+            # Validate proxies asynchronously with limited concurrency
+            async def validate_proxy(proxy):
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get('https://api.ipify.org', proxy=proxy, timeout=3) as response:
+                            return proxy if response.status == 200 else None
+                except (aiohttp.ClientError, asyncio.TimeoutError):
+                    return None
+
+            # Process proxies in batches of 10
+            for i in range(0, len(proxies), 10):
+                batch = [p.strip() for p in proxies[i:i+10] if p.strip()]
+                tasks = [validate_proxy(proxy) for proxy in batch]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                valid_proxies.extend([r for r in results if r is not None])
+                invalid_count += len(batch) - len([r for r in results if r is not None])
+
             user_proxies[user_id] = valid_proxies
             user_proxy_setting[user_id] = 'custom'
             await interaction.response.send_message(
-                f"Loaded {len(valid_proxies)} proxies. Using custom proxies for your requests.",
+                f"Loaded {len(valid_proxies)} valid proxies. {invalid_count} invalid proxies skipped.",
                 ephemeral=True
             )
         except Exception as e:
@@ -201,7 +242,8 @@ async def check_tokens():
         if user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
             proxy = random.choice(user_proxies[user_id])
         for token in tokens:
-            if validate_token(token, proxy):
+            is_valid, _ = await validate_token(token, proxy)
+            if is_valid:
                 valid_tokens.append(token)
             else:
                 print(f"Token invalid for user {user_id}")
