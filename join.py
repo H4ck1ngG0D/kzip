@@ -5,6 +5,7 @@ import requests
 import aiohttp
 import asyncio
 import random
+import re
 from datetime import datetime
 
 # Bot setup
@@ -56,27 +57,27 @@ async def validate_token(token, proxy=None):
         return False, error_msg
 
 # Join server using a token, invite code, and optional proxy
-def join_server(token, invite_code, proxy=None):
+async def join_server(token, invite_code, proxy=None):
     headers = {
         'Authorization': token,
         'Content-Type': 'application/json'
     }
     api_url = f"https://discord.com/api/v10/invites/{invite_code}"
-    proxies = {'http': proxy, 'https': proxy} if proxy else None
-    try:
-        response = requests.post(api_url, headers=headers, data='{}', proxies=proxies, timeout=10)
-        if response.status_code == 200:
-            join_logs['joined'] += 1
-            return "joined"
-        elif response.status_code == 403 and 'captcha' in response.text.lower():
-            join_logs['captcha'] += 1
-            return "captcha"
-        else:
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(api_url, headers=headers, data='{}', proxy=proxy, timeout=3) as response:
+                if response.status == 200:
+                    join_logs['joined'] += 1
+                    return "joined", "Joined successfully."
+                elif response.status == 403 and 'captcha' in (await response.text()).lower():
+                    join_logs['captcha'] += 1
+                    return "captcha", "Failed due to CAPTCHA."
+                else:
+                    join_logs['failed'] += 1
+                    return "failed", f"Failed: {response.status} {await response.text()[:100]}"
+        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
             join_logs['failed'] += 1
-            return f"failed: {response.status_code}"
-    except requests.RequestException as e:
-        join_logs['failed'] += 1
-        return f"failed: {str(e)}"
+            return "failed", f"Failed: {str(e)}"
 
 # Save successful tokens to a file
 def save_successful_tokens(tokens):
@@ -90,6 +91,142 @@ async def on_ready():
     print(f'Bot is ready as {bot.user}')
     await tree.sync()  # Sync slash commands
     check_tokens.start()  # Start the hourly token check
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    if isinstance(message.channel, discord.DMChannel):
+        # Handle !join command
+        if message.content.startswith('!join'):
+            match = re.search(r'(?:https?://)?discord\.gg/([a-zA-Z0-9-]+)|([a-zA-Z0-9-]+)', message.content)
+            if not match:
+                await message.channel.send("Invalid invite link. Use discord.gg/strk, https://discord.gg/strk, or strk.")
+                return
+            invite_code = match.group(1) or match.group(2)
+            user_id = message.author.id
+
+            if user_id not in user_tokens or not user_tokens[user_id]:
+                await message.channel.send("You have no saved tokens. Send tokens or token.txt in DM.")
+                return
+
+            results = []
+            successful_tokens = []
+            for token in user_tokens[user_id]:
+                proxy = None
+                if user_id not in user_proxy_setting or user_proxy_setting[user_id] == 'iproyal':
+                    proxy = random.choice(IPROYAL_PROXIES)
+                elif user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
+                    proxy = random.choice(user_proxies[user_id])
+
+                result, details = await join_server(token, invite_code, proxy)
+                results.append(f"Token attempt: {result} ({details})")
+                if result == "joined":
+                    successful_tokens.append(token)
+                await asyncio.sleep(0.5)  # 0.5-second delay between requests
+
+            # Send results and logs
+            await message.channel.send("\n".join(results))
+            log_message = f"joined {join_logs['joined']}\ncaptcha {join_logs['captcha']}\nfailed {join_logs['failed']}"
+            await message.channel.send(log_message)
+            if successful_tokens:
+                save_successful_tokens(successful_tokens)
+                await message.channel.send(f"Successful tokens:\n" + "\n".join(successful_tokens))
+
+        # Handle token or proxy submission
+        if message.attachments:
+            for attachment in message.attachments:
+                if attachment.filename.endswith('.txt'):
+                    content = await attachment.read()
+                    lines = content.decode('utf-8').splitlines()
+                    if not lines:
+                        await message.channel.send("Empty file.")
+                        return
+
+                    # Determine if it's a token or proxy file
+                    first_line = next((line.strip() for line in lines if line.strip()), "")
+                    is_proxy = first_line.startswith('http') or re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', first_line)
+                    user_id = message.author.id
+
+                    if is_proxy:
+                        valid_proxies = []
+                        invalid_count = 0
+                        async def validate_proxy(proxy):
+                            try:
+                                async with aiohttp.ClientSession() as session:
+                                    async with session.get('https://api.ipify.org', proxy=proxy, timeout=3) as response:
+                                        return proxy if response.status == 200 else None
+                            except (aiohttp.ClientError, asyncio.TimeoutError):
+                                return None
+
+                        for i in range(0, len(lines), 10):
+                            batch = [p.strip() for p in lines[i:i+10] if p.strip()]
+                            tasks = [validate_proxy(proxy) for proxy in batch]
+                            results = await asyncio.gather(*tasks, return_exceptions=True)
+                            valid_proxies.extend([r for r in results if r is not None])
+                            invalid_count += len(batch) - len([r for r in results if r is not None])
+
+                        user_proxies[user_id] = valid_proxies
+                        user_proxy_setting[user_id] = 'custom'
+                        await message.channel.send(
+                            f"Loaded {len(valid_proxies)} valid proxies. {invalid_count} invalid proxies skipped."
+                        )
+                    else:
+                        valid_tokens = []
+                        invalid_count = 0
+                        proxy = random.choice(IPROYAL_PROXIES) if user_id not in user_proxy_setting or user_proxy_setting[user_id] == 'iproyal' else None
+                        if user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
+                            proxy = random.choice(user_proxies[user_id])
+
+                        for token in lines:
+                            token = token.strip()
+                            if token and token not in user_tokens.get(user_id, []):
+                                is_valid, _ = await validate_token(token, proxy)
+                                if is_valid:
+                                    if user_id not in user_tokens:
+                                        user_tokens[user_id] = []
+                                    user_tokens[user_id].append(token)
+                                    valid_tokens.append(token)
+                                else:
+                                    invalid_count += 1
+                            else:
+                                invalid_count += 1
+
+                        await message.channel.send(
+                            f"Loaded {len(valid_tokens)} valid tokens. {invalid_count} invalid or duplicate tokens skipped."
+                        )
+        elif message.content:
+            # Handle tokens sent directly in message
+            tokens = message.content.splitlines()
+            valid_tokens = []
+            invalid_count = 0
+            user_id = message.author.id
+            proxy = random.choice(IPROYAL_PROXIES) if user_id not in user_proxy_setting or user_proxy_setting[user_id] == 'iproyal' else None
+            if user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
+                proxy = random.choice(user_proxies[user_id])
+
+            for token in tokens:
+                token = token.strip()
+                if token and token.startswith('M') and token not in user_tokens.get(user_id, []):
+                    is_valid, error_message = await validate_token(token, proxy)
+                    if is_valid:
+                        if user_id not in user_tokens:
+                            user_tokens[user_id] = []
+                        user_tokens[user_id].append(token)
+                        valid_tokens.append(token)
+                    else:
+                        invalid_count += 1
+                        await message.channel.send(f"Token invalid: {error_message}")
+                else:
+                    invalid_count += 1
+
+            if valid_tokens:
+                await message.channel.send(
+                    f"Loaded {len(valid_tokens)} valid tokens. {invalid_count} invalid or duplicate tokens skipped."
+                )
+
+    await bot.process_commands(message)
 
 @app_commands.command(name="savetoken", description="Save a single Discord token for joining servers")
 async def savetoken(interaction: discord.Interaction, token: str):
@@ -197,7 +334,11 @@ async def proxynone(interaction: discord.Interaction):
 
 @app_commands.command(name="join", description="Join a server using saved tokens and an invite link")
 async def join(interaction: discord.Interaction, invite_link: str):
-    invite_code = invite_link.split('/')[-1]
+    match = re.search(r'(?:https?://)?discord\.gg/([a-zA-Z0-9-]+)|([a-zA-Z0-9-]+)', invite_link)
+    if not match:
+        await interaction.response.send_message("Invalid invite link. Use discord.gg/strk, https://discord.gg/strk, or strk.", ephemeral=True)
+        return
+    invite_code = match.group(1) or match.group(2)
     user_id = interaction.user.id
 
     if user_id not in user_tokens or not user_tokens[user_id]:
@@ -216,8 +357,8 @@ async def join(interaction: discord.Interaction, invite_link: str):
         elif user_proxy_setting.get(user_id) == 'custom' and user_id in user_proxies:
             proxy = random.choice(user_proxies[user_id])
 
-        result = join_server(token, invite_code, proxy)
-        results.append(f"Token attempt: {result}")
+        result, details = await join_server(token, invite_code, proxy)
+        results.append(f"Token attempt: {result} ({details})")
         if result == "joined":
             successful_tokens.append(token)
         await asyncio.sleep(0.5)  # 0.5-second delay between requests
