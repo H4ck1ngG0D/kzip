@@ -97,7 +97,7 @@ async def savetoken(interaction: discord.Interaction, token: str):
         await interaction.response.send_message("Error: Invalid or expired token.", ephemeral=True)
 
 @app_commands.command(name="loadtokenfile", description="Load multiple tokens from a .txt file")
-async def loadtokenfile(interaction: discord.Interaction, file: discord.File):
+async def loadtokenfile(interaction: discord.Interaction, file: discord.Attachment):
     user_id = interaction.user.id
     if user_id not in user_tokens:
         user_tokens[user_id] = []
@@ -130,7 +130,7 @@ async def loadtokenfile(interaction: discord.Interaction, file: discord.File):
         await interaction.response.send_message("Please upload a .txt file.", ephemeral=True)
 
 @app_commands.command(name="proxyload", description="Load proxies from a .txt file")
-async def proxyload(interaction: discord.Interaction, file: discord.File):
+async def proxyload(interaction: discord.Interaction, file: discord.Attachment):
     user_id = interaction.user.id
     if file.filename.endswith('.txt'):
         try:
