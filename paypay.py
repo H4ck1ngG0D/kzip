@@ -26,41 +26,43 @@ def save_credentials(data):
 @commands.has_permissions(administrator=True)
 async def login(ctx, phone: str, password: str):
     await ctx.defer(ephemeral=True)
+
     guild_id = str(ctx.guild.id)
     creds = load_credentials()
     if guild_id in creds:
-        await ctx.respond("⚠️ すでにログイン済みです。/logout で解除してください。", ephemeral=True)
+        await ctx.followup.send("⚠️ すでにログイン済みです。/logout で解除してください。", ephemeral=True)
         return
 
     try:
-        paypay = PayPay(phone, password)
-        login_id = paypay.get_login_id()  # 認証リンクまたはID取得
-
-        # 電話番号とパスワードを一時保存
-        creds[guild_id] = {
-            "phone": phone,
-            "password": password,
-            "login_id": login_id
-        }
+        paypay = PayPay(phone, password)  # ← ここでSMS送信が始まる
+        creds[guild_id] = {"phone": phone, "password": password}
         save_credentials(creds)
 
-        # 認証IDを送信
-        await ctx.respond(
-            f"📨 認証リンクが送信されました！SMSを確認してください。\n"
-            f"```認証ID: {login_id}```",
-            ephemeral=True
-        )
-
-        # 認証リンクパネルを追加で送信（ここがあなたの指摘）
         await ctx.followup.send(
-            "👇 認証リンクまたはコードを入力してください。",
+            "📨 認証リンクがSMSで送られました。届いたら `/verify` またはモーダルでリンクを入力してください。",
             view=VerifyButton(phone, password, guild_id),
             ephemeral=True
         )
 
     except Exception as e:
-        await ctx.respond(f"❌ 初期化失敗: {e}", ephemeral=True)
+        await ctx.followup.send(f"❌ 初期化失敗: {e}", ephemeral=True)
 
+@bot.slash_command(description="認証リンクを入力してログイン（ステップ2）")
+@commands.has_permissions(administrator=True)
+async def verify(ctx):
+    guild_id = str(ctx.guild.id)
+    creds = load_credentials()
+
+    if guild_id not in creds:
+        await ctx.respond("⚠️ 先に `/login` を実行してください。", ephemeral=True)
+        return
+
+    data = creds[guild_id]
+    await ctx.respond(
+        "📝 認証リンクまたはコードを入力してください。",
+        view=VerifyButton(data["phone"], data["password"], guild_id),
+        ephemeral=True
+    )
 
 # Verify モーダル
 class VerifyModal(discord.ui.Modal):
