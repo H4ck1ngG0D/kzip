@@ -25,6 +25,7 @@ def save_credentials(data):
 @bot.slash_command(description="PayPayアカウントにログイン（ステップ1）")
 @commands.has_permissions(administrator=True)
 async def login(ctx, phone: str, password: str):
+    await ctx.defer(ephemeral=True)
     guild_id = str(ctx.guild.id)
     creds = load_credentials()
     if guild_id in creds:
