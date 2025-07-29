@@ -25,25 +25,17 @@ def save_credentials(data):
 @bot.slash_command(description="PayPayアカウントにログイン（管理者専用）")
 @commands.has_permissions(administrator=True)
 async def login(ctx, phone: str, password: str):
-    guild_id = str(ctx.guild.id)
-    creds = load_credentials()
-    if guild_id in creds:
-        await ctx.respond("⚠️ すでにログイン済みです。/logout で解除してください。", ephemeral=True)
-        return
-    await ctx.defer(ephemeral=True)
-    try:
-        paypay = PayPay(phone, password)
-        await paypay.login()
-    except Exception as e:
-        await ctx.respond(f"❌ ログイン失敗: {e}", ephemeral=True)
-        return
-    creds[guild_id] = {
-        "access_token": paypay.access_token,
-        "refresh_token": paypay.refresh_token,
-        "device_uuid": paypay.device_uuid
-    }
-    save_credentials(creds)
-    await ctx.respond("✅ ログイン成功", ephemeral=True)
+    guild_id = str(ctx.guild.id)
+    creds = load_credentials()
+    if guild_id in creds:
+        await ctx.respond("⚠️ すでにログイン済みです。/logout で解除してください。", ephemeral=True)
+        return
+
+    await ctx.respond(
+        "📲 認証リンクを入力するには下のボタンを押してください。",
+        view=VerifyButton(phone, password, guild_id),
+        ephemeral=True
+    )
 
 # Logout command
 @bot.slash_command(description="PayPayログアウト（管理者専用）")
@@ -70,6 +62,30 @@ async def log(ctx):
             else:
                 await ch.set_permissions(role, view_channel=True)
     await ctx.followup.send("✅ 管理者のみ閲覧可に設定", ephemeral=True)
+
+class VerifyModal(discord.ui.Modal):
+    def __init__(self, phone, password, guild_id):
+        super().__init__(title="認証コード入力")
+        self.phone = phone
+        self.password = password
+        self.guild_id = guild_id
+        self.add_item(discord.ui.InputText(label="認証リンクまたはID", placeholder="https://paypay.ne.jp/..." or "123456"))
+
+    async def callback(self, interaction: discord.Interaction):
+        creds = load_credentials()
+        try:
+            paypay = PayPay(self.phone, self.password)
+            paypay.login(self.children[0].value)  # 認証コードでログイン
+
+            creds[self.guild_id] = {
+                "access_token": paypay.access_token,
+                "refresh_token": paypay.refresh_token,
+                "device_uuid": paypay.device_uuid
+            }
+            save_credentials(creds)
+            await interaction.response.send_message("✅ ログイン成功", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 認証失敗: {e}", ephemeral=True)
 
 # Modal
 class PaymentModal(discord.ui.Modal):
