@@ -30,7 +30,7 @@ TRANSACTIONS_FILE = "transactions.json"
 BLACKLIST_FILE = "blacklist.json"
 
 # セキュリティ設定
-SECRET_KEY = "kamichita247"
+SECRET_KEY = "Kamichita247"
 MAX_RETRY_ATTEMPTS = 3
 RATE_LIMIT_WINDOW = 300  # 5分
 MAX_REQUESTS_PER_WINDOW = 10
@@ -293,7 +293,19 @@ class PaymentModal(discord.ui.Modal):
             # リンク情報を取得
             link_info = paypay.link_check(self.link.value)
             
-            if link_info.status != "PENDING":
+            # link_infoがタプルの場合の処理
+            if hasattr(link_info, 'status'):
+                status = link_info.status
+                amount = getattr(link_info, 'amount', 0)
+            elif isinstance(link_info, dict):
+                status = link_info.get('status', 'UNKNOWN')
+                amount = link_info.get('amount', 0)
+            else:
+                # タプルやその他の形式の場合
+                status = str(link_info) if link_info else 'UNKNOWN'
+                amount = 0
+            
+            if status != "PENDING":
                 await interaction.followup.send("❌ 無効または期限切れの支払いリンクです。", ephemeral=True)
                 return
             
@@ -306,7 +318,7 @@ class PaymentModal(discord.ui.Modal):
                 description="お支払いが正常に処理されました。ありがとうございました！",
                 color=0x00ff00
             )
-            success_embed.add_field(name="💰 金額", value=f"¥{link_info.amount:,}", inline=True)
+            success_embed.add_field(name="💰 金額", value=f"¥{amount:,}", inline=True)
             success_embed.add_field(name="👤 お名前", value=self.username.value, inline=True)
             success_embed.add_field(name="📅 処理日時", value=datetime.now().strftime("%Y/%m/%d %H:%M:%S"), inline=True)
             
@@ -320,7 +332,7 @@ class PaymentModal(discord.ui.Modal):
             )
             log_embed.add_field(name="👤 利用者", value=f"{interaction.user.mention}\n({interaction.user.display_name})", inline=True)
             log_embed.add_field(name="📝 入力名", value=self.username.value, inline=True)
-            log_embed.add_field(name="💰 金額", value=f"¥{link_info.amount:,}", inline=True)
+            log_embed.add_field(name="💰 金額", value=f"¥{amount:,}", inline=True)
             log_embed.add_field(name="🔐 パスワード", value="🔒 あり" if self.password.value else "🔓 なし", inline=True)
             log_embed.add_field(name="📊 ステータス", value="✅ 完了", inline=True)
             log_embed.add_field(name="🆔 ユーザーID", value=str(interaction.user.id), inline=True)
@@ -334,7 +346,7 @@ class PaymentModal(discord.ui.Modal):
             DataManager.log_transaction(
                 guild_id, 
                 interaction.user.id, 
-                link_info.amount, 
+                amount, 
                 "success", 
                 f"User: {self.username.value}"
             )
@@ -563,7 +575,7 @@ cleanup_sessions.start()
 
 # Discord Botトークンで実行
 if __name__ == "__main__":
-    TOKEN = os.getenv("DISCORD_BOT_TOKEN", "YOUR_DISCORD_BOT_TOKEN")
+    TOKEN = "DISCORD_BOT_TOKEN"
     if TOKEN == "YOUR_DISCORD_BOT_TOKEN":
         print("⚠️  環境変数 DISCORD_BOT_TOKEN を設定してください")
         exit(1)
