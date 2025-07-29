@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 # 設定
 class Config:
     # ファイルパス
-    PAYPAY_FILE = "secure_paypay.json"
-    SETTINGS_FILE = "guild_settings.json"
+    PAYPAY_FILE = "paypay.json"
+    SETTINGS_FILE = "settings.json"
     TRANSACTIONS_FILE = "transactions.json"
     
     # セキュリティ
