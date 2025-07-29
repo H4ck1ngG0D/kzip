@@ -31,11 +31,35 @@ async def login(ctx, phone: str, password: str):
         await ctx.respond("⚠️ すでにログイン済みです。/logout で解除してください。", ephemeral=True)
         return
 
-    await ctx.respond(
-        "📲 認証リンクを入力するには下のボタンを押してください。",
-        view=VerifyButton(phone, password, guild_id),
-        ephemeral=True
-    )
+    try:
+        paypay = PayPay(phone, password)
+        login_id = paypay.get_login_id()  # 認証リンクまたはID取得
+
+        # 電話番号とパスワードを一時保存
+        creds[guild_id] = {
+            "phone": phone,
+            "password": password,
+            "login_id": login_id
+        }
+        save_credentials(creds)
+
+        # 認証IDを送信
+        await ctx.respond(
+            f"📨 認証リンクが送信されました！SMSを確認してください。\n"
+            f"```認証ID: {login_id}```",
+            ephemeral=True
+        )
+
+        # 認証リンクパネルを追加で送信（ここがあなたの指摘）
+        await ctx.followup.send(
+            "👇 認証リンクまたはコードを入力してください。",
+            view=VerifyButton(phone, password, guild_id),
+            ephemeral=True
+        )
+
+    except Exception as e:
+        await ctx.respond(f"❌ 初期化失敗: {e}", ephemeral=True)
+
 
 # Verify モーダル
 class VerifyModal(discord.ui.Modal):
