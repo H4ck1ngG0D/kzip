@@ -8,7 +8,7 @@ import time
 import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from PayPaython_mobile import PayPay
 
 # プロフェッショナルログ設定
