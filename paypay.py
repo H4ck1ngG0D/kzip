@@ -174,7 +174,30 @@ class PayPayManager:
                 "last_used": time.time()
             }
             DataManager.save_json(CONFIG_FILE, config)
-            
+
+            # utils.py または paypay_utils.py に入れるとよい
+def process_paypay_link(paypay: PayPay, link: str, password: str = ""):
+    try:
+        link_info = paypay.link_check(link)
+        
+        if not link_info or not hasattr(link_info, "status"):
+            raise ValueError("無効なリンクです")
+        
+        if link_info.status not in ["PENDING", "ACTIVE"]:
+            raise ValueError(f"リンク状態が異常です: {link_info.status}")
+        
+        if link_info.has_password and not password:
+            raise ValueError("パスワードが設定されたリンクにはパスワードが必要です")
+
+        result = paypay.link_receive(link, password, link_info=link_info)
+        return result
+    
+    except PayPayLoginError as e:
+        raise PayPayLoginError("アクセストークンが無効です。再認証してください。") from e
+    
+    except Exception as e:
+        raise RuntimeError(f"送金処理失敗: {e}") from e
+
             # セッションクリーンアップ
             del self.active_sessions[guild_id]
             
@@ -358,7 +381,7 @@ class PaymentModal(discord.ui.Modal):
                 return
             
             # 支払い実行
-            result = paypay.link_receive(self.link.value, self.password.value or "", link_info)
+            result = process_paypay_link(paypay, self.link.value, self.password.value or "")
             
             # 成功処理
             display_amount = amount if isinstance(amount, int) and amount > 0 else "非公開"
