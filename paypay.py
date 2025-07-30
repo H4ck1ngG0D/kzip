@@ -175,39 +175,29 @@ class PayPayManager:
             }
             DataManager.save_json(CONFIG_FILE, config)
 
-            # utils.py または paypay_utils.py に入れるとよい
+            # --- utils 関数として定義されている処理 ---
 def process_paypay_link(paypay: PayPay, link: str, password: str = ""):
     try:
         link_info = paypay.link_check(link)
-        
+
         if not link_info or not hasattr(link_info, "status"):
             raise ValueError("無効なリンクです")
-        
+
         if link_info.status not in ["PENDING", "ACTIVE"]:
             raise ValueError(f"リンク状態が異常です: {link_info.status}")
-        
+
         if link_info.has_password and not password:
             raise ValueError("パスワードが設定されたリンクにはパスワードが必要です")
 
         result = paypay.link_receive(link, password, link_info=link_info)
         return result
-    
+
     except PayPayLoginError as e:
         raise PayPayLoginError("アクセストークンが無効です。再認証してください。") from e
-    
+
     except Exception as e:
         raise RuntimeError(f"送金処理失敗: {e}") from e
 
-            # セッションクリーンアップ
-            del self.active_sessions[guild_id]
-            
-            logger.info(f"PayPay authentication successful for guild {guild_id}")
-            return True, "✅ 認証完了！PayPay機能が有効になりました"
-            
-        except Exception as e:
-            logger.error(f"PayPay verification failed: {e}")
-            return False, f"認証失敗: {str(e)[:100]}"
-    
     def get_authenticated_paypay(self, guild_id: str) -> Optional[PayPay]:
         """認証済みPayPayインスタンス取得"""
         config = DataManager.load_json(CONFIG_FILE)
