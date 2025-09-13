@@ -1316,7 +1316,14 @@ async function decompressFile() {
         const password = document.getElementById('decryptPassword').value;
         const outputFormat = document.getElementById('outputFormat').value;
         
+        compressor.log(`ファイル: ${file.name} (${formatBytes(file.size)})`);
+        
         let data = new Uint8Array(await file.arrayBuffer());
+        
+        // ファイル形式の検証
+        if (data.length < 8) {
+            throw new Error('ファイルサイズが小さすぎます');
+        }
         
         // 復号化
         if (password) {
@@ -1335,11 +1342,22 @@ async function decompressFile() {
         // 統計情報更新
         updateDecompressStats(data.length, decompressed.length, archive.files.length, endTime - startTime);
         
+        compressor.log('解凍完了！ファイル出力を開始します...');
+        
         // 出力形式に応じて処理
         await outputFiles(archive, outputFormat);
         
     } catch (error) {
         compressor.log(`エラー: ${error.message}`);
+        
+        // より詳細なエラー情報を提供
+        if (error.message.includes('JSON')) {
+            compressor.log('可能な原因:');
+            compressor.log('1. ファイルが破損している');
+            compressor.log('2. 間違ったパスワードが入力された');
+            compressor.log('3. このツールで作成されていない圧縮ファイル');
+        }
+        
         alert('解凍中にエラーが発生しました: ' + error.message);
     } finally {
         btn.disabled = false;
