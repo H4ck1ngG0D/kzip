@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube ダウンローダー</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            font-size: 2em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #666;
+            font-size: 0.95em;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        .input-wrapper {
+            position: relative;
+        }
+        
+        .url-input {
+            width: 100%;
+            padding: 15px 50px 15px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+        }
+        
+        .url-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .clear-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #f0f0f0;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        
+        .clear-btn:hover {
+            background: #e0e0e0;
+        }
+        
+        .format-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .format-option {
+            flex: 1;
+            position: relative;
+        }
+        
+        .format-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+        }
+        
+        .format-label {
+            display: block;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+        }
+        
+        .format-option input[type="radio"]:checked + .format-label {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .format-label:hover {
+            border-color: #667eea;
+        }
+        
+        .download-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
+        }
+        
+        .download-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+        }
+        
+        .download-btn:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 12px;
+            display: none;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .status.loading {
+            display: block;
+            background: #fff3cd;
+            color: #856404;
+            border-left: 4px solid #ffc107;
+        }
+        
+        .status.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+        }
+        
+        .status.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .result-card {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+            display: none;
+        }
+        
+        .result-card.show {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .video-preview {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .thumbnail-img {
+            width: 120px;
+            height: 90px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        
+        .video-info {
+            flex: 1;
+        }
+        
+        .video-title {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 1.1em;
+        }
+        
+        .video-format {
+            display: inline-block;
+            padding: 3px 10px;
+            background: #667eea;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .action-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .action-btn.primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .action-btn.secondary {
+            background: #2196F3;
+            color: white;
+        }
+        
+        .action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .features {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        .features h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+        
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        
+        .feature-icon {
+            font-size: 1.5em;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+            
+            .header h1 {
+                font-size: 1.5em;
+            }
+            
+            .format-selector {
+                flex-direction: column;
+            }
+            
+            .video-preview {
+                flex-direction: column;
+            }
+            
+            .thumbnail-img {
+                width: 100%;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📽️ YouTube ダウンローダー</h1>
+            <p>YouTubeの動画を簡単にダウンロード</p>
+        </div>
+        
+        <form id="downloadForm">
+            <div class="input-group">
+                <label for="urlInput">🔗 YouTube URL</label>
+                <div class="input-wrapper">
+                    <input 
+                        type="text" 
+                        id="urlInput" 
+                        class="url-input" 
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        required
+                    >
+                    <button type="button" class="clear-btn" id="clearBtn">✕</button>
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label>📁 フォーマット</label>
+                <div class="format-selector">
+                    <div class="format-option">
+                        <input type="radio" id="formatMp4" name="format" value="mp4" checked>
+                        <label for="formatMp4" class="format-label">
+                            🎬 MP4<br>
+                            <small>動画</small>
+                        </label>
+                    </div>
+                    <div class="format-option">
+                        <input type="radio" id="formatMp3" name="format" value="mp3">
+                        <label for="formatMp3" class="format-label">
+                            🎵 MP3<br>
+                            <small>音声のみ</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <button type="submit" class="download-btn" id="downloadBtn">
+                📥 ダウンロードリンクを取得
+            </button>
+        </form>
+        
+        <div id="status" class="status"></div>
+        
+        <div id="resultCard" class="result-card">
+            <div class="video-preview">
+                <img id="thumbnail" class="thumbnail-img" src="" alt="動画サムネイル">
+                <div class="video-info">
+                    <div class="video-title" id="videoTitle"></div>
+                    <span class="video-format" id="videoFormat"></span>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <a href="#" class="action-btn primary" id="downloadLink" target="_blank">
+                    📥 ダウンロード開始
+                </a>
+                <a href="#" class="action-btn secondary" id="pageLink" target="_blank">
+                    📄 ダウンロードページ
+                </a>
+            </div>
+        </div>
+        
+        <div class="features">
+            <h3>✨ 特徴</h3>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">⚡</span>
+                    <span>高速処理</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🔒</span>
+                    <span>安全・安心</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">💾</span>
+                    <span>直接ダウンロード</span>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">⏰</span>
+                    <span>1時間有効</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('downloadForm');
+        const urlInput = document.getElementById('urlInput');
+        const clearBtn = document.getElementById('clearBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const status = document.getElementById('status');
+        const resultCard = document.getElementById('resultCard');
+        
+        // クリアボタンの表示/非表示
+        urlInput.addEventListener('input', () => {
+            clearBtn.style.display = urlInput.value ? 'flex' : 'none';
+        });
+        
+        clearBtn.addEventListener('click', () => {
+            urlInput.value = '';
+            clearBtn.style.display = 'none';
+            urlInput.focus();
+        });
+        
+        // ステータス表示
+        function showStatus(message, type) {
+            status.className = `status ${type}`;
+            status.innerHTML = message;
+        }
+        
+        // フォーム送信処理
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const url = urlInput.value.trim();
+            const format = document.querySelector('input[name="format"]:checked').value;
+            
+            // バリデーション
+            if (!url) {
+                showStatus('❌ URLを入力してください', 'error');
+                return;
+            }
+            
+            // YouTube URL チェック
+            const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/)|youtu\.be\/).+/;
+            if (!youtubeRegex.test(url)) {
+                showStatus('❌ 有効なYouTube URLを入力してください', 'error');
+                return;
+            }
+            
+            // ローディング状態
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<span class="spinner"></span> 処理中...';
+            showStatus('⏳ 動画情報を取得中...', 'loading');
+            resultCard.classList.remove('show');
+            
+            try {
+                // API呼び出し
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        url: url,
+                        format: format
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'ダウンロードに失敗しました');
+                }
+                
+                // 成功
+                showStatus('✅ ダウンロードリンクを取得しました！', 'success');
+                
+                // 結果カード表示
+                document.getElementById('thumbnail').src = data.thumbnail || '';
+                document.getElementById('videoTitle').textContent = data.title;
+                document.getElementById('videoFormat').textContent = format.toUpperCase();
+                document.getElementById('downloadLink').href = data.direct_download;
+                document.getElementById('pageLink').href = data.download_page;
+                
+                resultCard.classList.add('show');
+                
+                // スクロール
+                resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                
+            } catch (error) {
+                showStatus(`❌ エラー: ${error.message}`, 'error');
+                console.error('Download error:', error);
+            } finally {
+                // ボタンを元に戻す
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = '📥 ダウンロードリンクを取得';
+            }
+        });
+        
+        // ページ読み込み時にURLパラメータをチェック
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const urlParam = params.get('url');
+            if (urlParam) {
+                urlInput.value = urlParam;
+                clearBtn.style.display = 'flex';
+            }
+        });
+    </script>
+</body>
+</html>
